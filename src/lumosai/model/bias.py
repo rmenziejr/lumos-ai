@@ -1,10 +1,121 @@
-"""Bias and fairness reporting."""
-
 from __future__ import annotations
 
+from collections.abc import Callable
 from typing import Any
 
+import pandas as pd
 
-def bias_report(*args: Any, **kwargs: Any) -> Any:
-    """Report group-wise model performance disparities."""
-    raise NotImplementedError("bias_report will be implemented in Task 8")
+from lumosai.data.ingest import to_pandas
+from lumosai.data.validation import require_columns
+from lumosai.mlflow import log_result
+from lumosai.model.metrics import TaskType, compare_metric, detect_task_type, get_metrics
+from lumosai.model.validation import validate_prediction_frame
+from lumosai.results import LumosResult
+from lumosai.settings import settings
+
+ProtectedAttribute = list[str] | dict[str, list[float] | None]
+
+
+def _normalize_protected_attribute(
+    protected_attribute: ProtectedAttribute,
+) -> dict[str, list[float] | None]:
+    if isinstance(protected_attribute, list):
+        return {column: None for column in protected_attribute}
+    return protected_attribute
+
+
+def _group_series(df: pd.DataFrame, column: str, bins: list[float] | None) -> pd.Series:
+    if bins is None:
+        return df[column].astype("object")
+    return pd.cut(df[column], bins=bins, include_lowest=True).astype("object")
+
+
+def _best_value(values: list[float], *, greater_is_better: bool) -> float:
+    return max(values) if greater_is_better else min(values)
+
+
+def bias_report(
+    current: Any,
+    target: str,
+    prediction: str,
+    protected_attribute: ProtectedAttribute,
+    prediction_score: str | None = None,
+    task_type: TaskType | None = None,
+    custom_metrics: list[tuple[str, Callable[..., float]]] | None = None,
+    experiment_name: str | None = None,
+) -> LumosResult:
+    current_pd = to_pandas(current)
+    validate_prediction_frame(
+        current_pd,
+        target=target,
+        prediction=prediction,
+        prediction_score=prediction_score,
+    )
+    normalized = _normalize_protected_attribute(protected_attribute)
+    require_columns(current_pd, normalized.keys())
+    resolved_task = task_type or detect_task_type(current_pd[target], current_pd[prediction])
+
+    summary: dict[str, Any] = {"by_attribute": {}}
+    flagged: list[dict[str, Any]] = []
+
+    for attribute, bins in normalized.items():
+        groups = _group_series(current_pd, attribute, bins)
+        working = current_pd.assign(_lumos_group=groups)
+        by_group: list[dict[str, Any]] = []
+
+        for group_name, group_df in working.groupby("_lumos_group", observed=False):
+            metric_values = get_metrics(
+                group_df[target],
+                group_df[prediction],
+                y_score=group_df[prediction_score] if prediction_score is not None else None,
+                task_type=resolved_task,
+                custom_metrics=custom_metrics,
+            )
+            if resolved_task == "classification":
+                metric_values["positive_prediction_rate"] = float(
+                    pd.Series(group_df[prediction]).mean()
+                )
+            else:
+                residual = group_df[prediction] - group_df[target]
+                metric_values["mean_residual"] = float(residual.mean())
+                metric_values["mean_absolute_residual"] = float(residual.abs().mean())
+
+            by_group.append(
+                {"group": str(group_name), "count": int(len(group_df)), **metric_values}
+            )
+
+        comparisons: list[dict[str, Any]] = []
+        metric_names = (
+            [key for key in by_group[0] if key not in {"group", "count"}] if by_group else []
+        )
+        for metric_name in metric_names:
+            threshold = settings.model.metric_thresholds.get(metric_name)
+            greater_is_better = threshold.greater_is_better if threshold is not None else True
+            values = [float(row[metric_name]) for row in by_group]
+            best = _best_value(values, greater_is_better=greater_is_better)
+            for row in by_group:
+                comparison = compare_metric(
+                    metric_name,
+                    group_value=float(row[metric_name]),
+                    best_value=best,
+                    threshold=threshold,
+                )
+                comparison["group"] = row["group"]
+                comparison["protected_attribute"] = attribute
+                comparisons.append(comparison)
+                if comparison["flagged"]:
+                    flagged.append(comparison)
+
+        summary["by_attribute"][attribute] = {
+            "by_group": by_group,
+            "comparisons": comparisons,
+        }
+
+    result = LumosResult(
+        metrics={"bias/flags_count": float(len(flagged))},
+        summary=summary,
+        flagged=flagged,
+        metadata={"report_type": "bias", "task_type": resolved_task},
+    )
+    log_result(result, experiment_name=experiment_name)
+    return result
