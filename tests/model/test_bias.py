@@ -1,8 +1,10 @@
 from __future__ import annotations
 
 import pandas as pd
+import pytest
 
 from lumosai.model.bias import bias_report
+from lumosai.settings import MetricThreshold, settings
 
 
 def test_bias_report_flags_group_disparity_for_classification() -> None:
@@ -73,6 +75,30 @@ def test_bias_report_handles_string_positive_labels() -> None:
     assert any(flag["metric"] == "positive_prediction_rate" for flag in result.flagged)
 
 
+def test_bias_report_handles_non_zero_one_numeric_positive_labels() -> None:
+    frame = pd.DataFrame(
+        {
+            "actual": [2, 2, 2, 2, 1, 1],
+            "prediction": [2, 2, 1, 1, 1, 1],
+            "segment": ["a", "a", "b", "b", "b", "b"],
+        }
+    )
+
+    result = bias_report(
+        frame,
+        target="actual",
+        prediction="prediction",
+        protected_attribute=["segment"],
+        task_type="classification",
+    )
+
+    groups = {
+        row["group"]: row["positive_prediction_rate"]
+        for row in result.summary["by_attribute"]["segment"]["by_group"]
+    }
+    assert groups == {"a": 1.0, "b": 0.0}
+
+
 def test_bias_report_keeps_out_of_bin_and_missing_groups() -> None:
     frame = pd.DataFrame(
         {
@@ -94,6 +120,65 @@ def test_bias_report_keeps_out_of_bin_and_missing_groups() -> None:
         row["group"] for row in result.summary["by_attribute"]["age"]["by_group"]
     }
     assert "__out_of_bin__" in groups
+    assert "__missing__" in groups
+
+
+def test_bias_report_uses_absolute_parity_thresholds(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    frame = pd.DataFrame(
+        {
+            "actual": [1, 1, 1, 1],
+            "prediction": [1, 1, 1, 0],
+            "segment": ["a", "a", "b", "b"],
+        }
+    )
+    monkeypatch.setitem(
+        settings.model.metric_thresholds,
+        "positive_prediction_rate",
+        MetricThreshold(mode="absolute", value=0.25, greater_is_better=True),
+    )
+
+    result = bias_report(
+        frame,
+        target="actual",
+        prediction="prediction",
+        protected_attribute=["segment"],
+        task_type="classification",
+    )
+
+    comparisons = result.summary["by_attribute"]["segment"]["comparisons"]
+    parity = [
+        comparison
+        for comparison in comparisons
+        if comparison["metric"] == "positive_prediction_rate"
+    ]
+    assert parity
+    assert all(comparison["comparison_mode"] == "absolute_parity" for comparison in parity)
+    assert any(comparison["flagged"] for comparison in parity)
+
+
+def test_bias_report_compares_metrics_missing_from_first_group() -> None:
+    frame = pd.DataFrame(
+        {
+            "actual": [1, 1, 0, 1, 0, 1],
+            "prediction": [1, 1, 0, 1, 1, 0],
+            "score": [0.9, 0.8, 0.1, 0.7, 0.4, 0.6],
+            "segment": ["a", "a", "b", "b", "c", "c"],
+        }
+    )
+
+    result = bias_report(
+        frame,
+        target="actual",
+        prediction="prediction",
+        prediction_score="score",
+        protected_attribute=["segment"],
+        task_type="classification",
+    )
+
+    comparisons = result.summary["by_attribute"]["segment"]["comparisons"]
+    assert any(comparison["metric"] == "roc_auc" for comparison in comparisons)
 
 
 def test_bias_report_treats_regression_error_as_lower_is_better() -> None:

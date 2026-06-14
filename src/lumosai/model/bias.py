@@ -29,7 +29,9 @@ def _group_series(df: pd.DataFrame, column: str, bins: list[float] | None) -> pd
     if bins is None:
         return df[column].astype("object").where(df[column].notna(), "__missing__")
     cut = pd.cut(df[column], bins=bins, include_lowest=True)
-    return cut.astype("object").where(cut.notna(), "__out_of_bin__")
+    grouped = cut.astype("object")
+    grouped = grouped.where(~df[column].isna(), "__missing__")
+    return grouped.where(cut.notna() | df[column].isna(), "__out_of_bin__")
 
 
 def _best_value(values: list[float], *, greater_is_better: bool) -> float:
@@ -57,9 +59,19 @@ def _binary_favorable_label(y_true: pd.Series, y_pred: pd.Series) -> Any | None:
     if len(labels) != 2:
         return None
 
-    for candidate in (1, True):
-        if candidate in labels:
-            return candidate
+    if all(isinstance(label, bool | np.bool_) for label in labels):
+        return True
+
+    numeric_labels: list[float] = []
+    for label in labels:
+        try:
+            numeric_labels.append(float(label))
+        except (TypeError, ValueError):
+            break
+    else:
+        if set(numeric_labels) == {0.0, 1.0}:
+            return labels[numeric_labels.index(1.0)]
+        return labels[numeric_labels.index(max(numeric_labels))]
 
     favorable_names = {"yes", "true", "positive", "pos", "approved", "approve"}
     for label in labels:
@@ -107,19 +119,27 @@ def _parity_comparisons(
     values = [value for _, value in finite_rows]
     max_value = max(values)
     min_value = min(values)
-    ratio = 1.0 if max_value == 0 else min_value / max_value
     resolved = threshold or MetricThreshold(mode="relative", value=0.8, greater_is_better=True)
-    flagged = ratio < resolved.value
+    diff = max_value - min_value
+    if resolved.mode == "absolute":
+        comparison_mode = "absolute_parity"
+        ratio = np.nan
+        flagged = diff > resolved.value
+    else:
+        comparison_mode = "relative_parity"
+        ratio = 1.0 if max_value == 0 else min_value / max_value
+        flagged = ratio < resolved.value
 
     return [
         {
             "metric": metric_name,
-            "comparison_mode": "parity",
+            "comparison_mode": comparison_mode,
             "group": row["group"],
             "protected_attribute": protected_attribute,
             "group_value": value,
             "max_value": float(max_value),
             "min_value": float(min_value),
+            "diff": float(diff),
             "ratio": float(ratio),
             "threshold": float(resolved.value),
             "flagged": bool(flagged),
@@ -186,8 +206,13 @@ def bias_report(
             )
 
         comparisons: list[dict[str, Any]] = []
-        metric_names = (
-            [key for key in by_group[0] if key not in {"group", "count"}] if by_group else []
+        metric_names = sorted(
+            {
+                key
+                for row in by_group
+                for key in row
+                if key not in {"group", "count"}
+            }
         )
         for metric_name in metric_names:
             if metric_name == "mean_residual":
