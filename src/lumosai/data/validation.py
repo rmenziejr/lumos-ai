@@ -8,9 +8,10 @@ from lumosai.exceptions import LumosValidationError
 
 
 def require_no_duplicate_columns(df: pd.DataFrame) -> None:
-    duplicates = sorted({column for column in df.columns if list(df.columns).count(column) > 1})
-    if duplicates:
-        msg = f"dataframe has duplicate columns: {', '.join(map(str, duplicates))}"
+    duplicates = df.columns[df.columns.duplicated()].unique()
+    if len(duplicates) > 0:
+        duplicate_names = sorted(map(str, duplicates))
+        msg = f"dataframe has duplicate columns: {', '.join(duplicate_names)}"
         raise LumosValidationError(msg)
 
 

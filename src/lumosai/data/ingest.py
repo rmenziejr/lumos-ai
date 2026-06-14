@@ -5,11 +5,15 @@ from typing import Any
 import narwhals as nw
 import pandas as pd
 
+from lumosai.data.validation import require_no_duplicate_columns
 from lumosai.exceptions import LumosValidationError
 
 
 def to_pandas(df: Any) -> pd.DataFrame:
     """Convert a Narwhals-compatible dataframe to a pandas DataFrame copy."""
+    if isinstance(df, pd.DataFrame):
+        require_no_duplicate_columns(df)
+
     try:
         native = nw.from_native(df)
         pandas_df = native.to_pandas()

@@ -25,6 +25,26 @@ def test_require_no_duplicate_columns_reports_duplicates() -> None:
         require_no_duplicate_columns(frame)
 
 
+def test_require_no_duplicate_columns_handles_mixed_type_duplicates() -> None:
+    frame = pd.DataFrame([[1, 2, 3, 4]], columns=[1, 1, "a", "a"])
+
+    with pytest.raises(LumosValidationError, match="duplicate columns: 1, a"):
+        require_no_duplicate_columns(frame)
+
+
+def test_require_no_duplicate_columns_allows_unique_columns() -> None:
+    frame = pd.DataFrame({"a": [1], "b": [2]})
+
+    require_no_duplicate_columns(frame)
+
+
+def test_require_columns_reports_multiple_missing_columns() -> None:
+    frame = pd.DataFrame({"a": [1]})
+
+    with pytest.raises(LumosValidationError, match="missing required columns: b, c"):
+        require_columns(frame, ["a", "b", "c"])
+
+
 def test_validate_temporal_features_rejects_missing_columns() -> None:
     frame = pd.DataFrame({"feature": [1]})
 
