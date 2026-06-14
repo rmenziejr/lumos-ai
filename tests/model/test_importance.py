@@ -1,10 +1,12 @@
 from __future__ import annotations
 
+import builtins
+
 import pandas as pd
 import pytest
 from sklearn.ensemble import RandomForestClassifier
 
-from lumosai.exceptions import LumosValidationError
+from lumosai.exceptions import LumosOptionalDependencyError, LumosValidationError
 from lumosai.model.importance import feature_importance
 
 
@@ -92,6 +94,32 @@ def test_feature_importance_rejects_empty_feature_columns() -> None:
             frame,
             target="target",
             feature_columns=[],
+        )
+
+
+def test_shap_importance_requires_optional_dependency(monkeypatch) -> None:
+    real_import = builtins.__import__
+
+    def fake_import(name, *args, **kwargs):
+        if name == "shap":
+            raise ImportError("missing shap")
+        return real_import(name, *args, **kwargs)
+
+    monkeypatch.setattr(builtins, "__import__", fake_import)
+
+    frame = make_frame()
+    model = RandomForestClassifier(n_estimators=20, random_state=42).fit(
+        frame[["signal", "noise"]],
+        frame["target"],
+    )
+
+    with pytest.raises(LumosOptionalDependencyError, match="SHAP"):
+        feature_importance(
+            model,
+            frame,
+            target="target",
+            feature_columns=["signal", "noise"],
+            method="shap",
         )
 
 
