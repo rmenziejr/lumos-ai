@@ -12,7 +12,7 @@ from lumosai.data.sampling import build_sample
 from lumosai.data.validation import require_columns
 from lumosai.exceptions import LumosValidationError
 from lumosai.mlflow import log_run, mlflow_run, resolve_experiment_name
-from lumosai.model.bias import bias_report
+from lumosai.model.bias import ProtectedAttribute, bias_report
 from lumosai.model.performance import performance_report
 from lumosai.results import LumosResult, LumosRun
 from lumosai.settings import Settings, settings
@@ -51,14 +51,14 @@ def _performance_expected(
 
 def _bias_expected(
     *,
-    protected_attribute: str | list[str] | dict[str, list[float]] | None,
+    protected_attribute: str | ProtectedAttribute | None,
     include_bias: bool | None,
 ) -> bool:
     return include_bias is True or protected_attribute is not None
 
 
 def _protected_columns(
-    protected_attribute: str | list[str] | dict[str, list[float]],
+    protected_attribute: str | ProtectedAttribute,
 ) -> list[str]:
     if isinstance(protected_attribute, str):
         return [protected_attribute]
@@ -68,8 +68,8 @@ def _protected_columns(
 
 
 def _bias_protected_attribute(
-    protected_attribute: str | list[str] | dict[str, list[float]],
-) -> list[str] | dict[str, list[float]]:
+    protected_attribute: str | ProtectedAttribute,
+) -> ProtectedAttribute:
     if isinstance(protected_attribute, str):
         return [protected_attribute]
     return protected_attribute
@@ -85,7 +85,7 @@ def _preflight_monitoring_report(
     prediction_score: str | None,
     feature_columns: list[str] | None,
     categorical_columns: list[str] | None,
-    protected_attribute: str | list[str] | dict[str, list[float]] | None,
+    protected_attribute: str | ProtectedAttribute | None,
     temporal_features: list[str],
     include_performance: bool | None,
     include_bias: bool | None,
@@ -146,7 +146,7 @@ def monitoring_report(
     prediction_score: str | None = None,
     feature_columns: list[str] | None = None,
     categorical_columns: list[str] | None = None,
-    protected_attribute: str | list[str] | dict[str, list[float]] | None = None,
+    protected_attribute: str | ProtectedAttribute | None = None,
     temporal_features: list[str] | None = None,
     time_column: str | None = None,
     sample_size: int | None = None,
