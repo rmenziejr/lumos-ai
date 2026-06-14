@@ -134,6 +134,31 @@ def test_log_sample_raw_artifact_is_explicit_opt_in(monkeypatch, tmp_path) -> No
     assert fake.artifacts == [(str(tmp_path / "sample.csv"), "samples")]
 
 
+def test_log_sample_does_not_log_raw_artifact_without_dataframe(monkeypatch, tmp_path) -> None:
+    fake = FakeMlflow()
+    result = LumosResult(
+        summary={"role": "holdout", "sample_rows": 0},
+        artifacts={},
+        metadata={"report_type": "sample"},
+    )
+
+    monkeypatch.setattr(
+        "lumosai.mlflow.mlflow_run",
+        lambda *_args, **_kwargs: nullcontext((fake, "run-1")),
+    )
+
+    log_sample(
+        result,
+        artifact_path=tmp_path / "missing.csv",
+        experiment_name="monitoring",
+        log_metadata=False,
+        log_artifact=True,
+    )
+
+    assert fake.artifacts == []
+    assert not (tmp_path / "missing.csv").exists()
+
+
 def test_log_artifact_paths_honors_disabled_artifact_logging(
     monkeypatch: pytest.MonkeyPatch,
     tmp_path: Path,

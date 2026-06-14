@@ -102,12 +102,14 @@ def log_sample(
 ) -> LumosResult:
     sample = result.artifacts.get("sample")
     local_path = Path(artifact_path) if artifact_path is not None else None
+    written_path: Path | None = None
     if isinstance(sample, pd.DataFrame) and local_path is not None:
         local_path.parent.mkdir(parents=True, exist_ok=True)
         if local_path.suffix == ".csv":
             sample.to_csv(local_path, index=False)
         else:
             sample.to_parquet(local_path, index=False)
+        written_path = local_path
         result.metadata["sample_artifact_path"] = str(local_path)
 
     resolved = resolve_experiment_name(experiment_name, loaded_settings)
@@ -130,8 +132,8 @@ def log_sample(
         result.metadata["mlflow_run_id"] = run_id
         if should_log_metadata:
             mlflow.log_dict(result.summary, "lumosai_sample_metadata.json")
-        if should_log_artifact and local_path is not None:
-            mlflow.log_artifact(str(local_path), artifact_path="samples")
+        if should_log_artifact and written_path is not None:
+            mlflow.log_artifact(str(written_path), artifact_path="samples")
     return result
 
 
