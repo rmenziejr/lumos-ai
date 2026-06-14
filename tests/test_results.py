@@ -4,7 +4,20 @@ from pathlib import Path
 
 import pandas as pd
 
+import lumosai
 from lumosai.results import LumosResult, json_safe_artifacts
+
+
+def test_public_package_imports_during_staged_implementation() -> None:
+    assert lumosai.LumosResult is LumosResult
+
+
+def test_wildcard_exports_import_during_staged_implementation() -> None:
+    namespace: dict[str, object] = {}
+
+    exec("from lumosai import *", namespace)
+
+    assert namespace["LumosResult"] is LumosResult
 
 
 def test_lumos_result_to_dict_excludes_report_and_serializes_artifacts() -> None:
