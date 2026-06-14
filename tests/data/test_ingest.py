@@ -1,0 +1,22 @@
+from __future__ import annotations
+
+import pandas as pd
+import pytest
+
+from lumosai.data.ingest import to_pandas
+from lumosai.exceptions import LumosValidationError
+
+
+def test_to_pandas_returns_copy_for_pandas_dataframe() -> None:
+    source = pd.DataFrame({"a": [1, 2]})
+
+    result = to_pandas(source)
+    result.loc[0, "a"] = 99
+
+    assert isinstance(result, pd.DataFrame)
+    assert source.loc[0, "a"] == 1
+
+
+def test_to_pandas_rejects_empty_dataframe() -> None:
+    with pytest.raises(LumosValidationError, match="must contain at least one row"):
+        to_pandas(pd.DataFrame({"a": []}))
