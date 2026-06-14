@@ -135,6 +135,64 @@ def test_profile_uses_temporal_sampling(
     assert result.metadata["minimal"] is False
 
 
+def test_profile_orders_target_first_and_passes_ydata_kwargs(
+    monkeypatch: pytest.MonkeyPatch,
+    tmp_path: Path,
+) -> None:
+    frame = pd.DataFrame(
+        {
+            "feature": [1, 2, 3],
+            "target": [0, 1, 0],
+            "day_of_week": [1, 2, 3],
+        }
+    )
+
+    class FakeProfileReport:
+        def __init__(self, df: pd.DataFrame, minimal: bool, **kwargs: Any) -> None:
+            self.df = df
+            self.minimal = minimal
+            self.kwargs = kwargs
+
+        def to_file(self, output_file: Path) -> None:
+            output_file.write_text("<html>profile</html>")
+
+    monkeypatch.setattr("lumosai.data.profiling.ProfileReport", FakeProfileReport)
+    monkeypatch.setattr(settings.artifacts, "local_dir", tmp_path)
+
+    result = profile(
+        frame,
+        target="target",
+        feature_columns=["feature", "day_of_week"],
+        categorical_columns=["day_of_week"],
+        report_name="Training Profile",
+        ydata_kwargs={"explorative": True},
+    )
+
+    report = cast(Any, result.report)
+    assert list(report.df.columns) == ["target", "feature", "day_of_week"]
+    assert report.kwargs == {"explorative": True, "title": "Training Profile"}
+    assert result.metadata["report_name"] == "Training Profile"
+    assert result.metadata["target"] == "target"
+    assert result.metadata["feature_columns"] == ["feature", "day_of_week"]
+    assert result.metadata["categorical_columns"] == ["day_of_week"]
+
+
+def test_profile_rejects_conflicting_ydata_title(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    frame = pd.DataFrame({"target": [0, 1], "feature": [1, 2]})
+
+    with pytest.raises(LumosValidationError, match="title"):
+        profile(
+            frame,
+            target="target",
+            feature_columns=["feature"],
+            report_name="Training Profile",
+            ydata_kwargs={"title": "other"},
+            log_analysis=False,
+        )
+
+
 def test_profile_logs_mlflow_artifact_and_result_in_same_run(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:

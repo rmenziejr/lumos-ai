@@ -12,9 +12,16 @@ from lumosai.data.validation import require_columns
 from lumosai.exceptions import LumosOptionalDependencyError, LumosValidationError
 from lumosai.mlflow import mlflow_run, resolve_experiment_name
 from lumosai.results import LumosResult
+from lumosai.schema import (
+    filter_supported_kwargs,
+    select_analysis_frame,
+    validate_categorical_columns,
+)
 from lumosai.settings import settings
 
 ProfileReport: Any | None = None
+YDATA_KWARGS = {"explorative", "dark_mode", "config_file", "vars", "sort", "sensitive"}
+YDATA_REJECTED_KWARGS = {"title", "minimal"}
 
 
 def _profile_report_class() -> Any:
@@ -87,22 +94,53 @@ def _log_profile_result(
 
 def profile(
     df: Any,
+    target: str | None = None,
+    feature_columns: list[str] | None = None,
+    categorical_columns: list[str] | None = None,
     time_column: str | None = None,
     freq: str = "M",
     sample_size: int | None = None,
     min_per_period: int = 1,
     minimal: bool | None = None,
     log_analysis: bool | None = None,
+    report_name: str | None = None,
+    ydata_kwargs: dict[str, Any] | None = None,
     experiment_name: str | None = None,
 ) -> LumosResult:
     frame = to_pandas(df)
+    analysis_frame = select_analysis_frame(
+        frame,
+        target=target,
+        feature_columns=feature_columns,
+        required_columns=[time_column] if time_column is not None else None,
+    )
+    selected_categorical_columns = validate_categorical_columns(
+        analysis_frame,
+        categorical_columns=categorical_columns,
+        analysis_columns=analysis_frame.columns,
+    )
+    profile_kwargs = filter_supported_kwargs(
+        ydata_kwargs,
+        allowed=YDATA_KWARGS,
+        rejected=YDATA_REJECTED_KWARGS,
+        parameter_name="ydata_kwargs",
+    )
+    if report_name is not None:
+        profile_kwargs["title"] = report_name
+
     if time_column is None:
-        profiled = frame
+        profiled = analysis_frame
         resolved_minimal = settings.data.profile_minimal_default if minimal is None else minimal
         sampling_summary: dict[str, Any] = {"mode": "full"}
     else:
         rows_per_period = 1000 if sample_size is None else sample_size
-        profiled = temporal_sample(frame, time_column, freq, rows_per_period, min_per_period)
+        profiled = temporal_sample(
+            analysis_frame,
+            time_column,
+            freq,
+            rows_per_period,
+            min_per_period,
+        )
         resolved_minimal = False if minimal is None else minimal
         sampling_summary = {
             "mode": "temporal",
@@ -112,9 +150,18 @@ def profile(
             "sampled_rows": len(profiled),
         }
 
-    report = _profile_report_class()(profiled, minimal=resolved_minimal)
+    report = _profile_report_class()(profiled, minimal=resolved_minimal, **profile_kwargs)
     should_log_analysis = settings.data.log_analysis if log_analysis is None else log_analysis
     artifacts: dict[str, Any] = {}
+    metadata: dict[str, Any] = {"report_type": "profile", "minimal": resolved_minimal}
+    if report_name is not None:
+        metadata["report_name"] = report_name
+    if target is not None:
+        metadata["target"] = target
+    if feature_columns is not None:
+        metadata["feature_columns"] = list(feature_columns)
+    if selected_categorical_columns:
+        metadata["categorical_columns"] = selected_categorical_columns
     if should_log_analysis:
         logging_requested = resolve_experiment_name(experiment_name) is not None
         keep_local = not logging_requested or not settings.mlflow.log_artifacts
@@ -133,7 +180,7 @@ def profile(
                 },
                 artifacts=artifacts,
                 report=report,
-                metadata={"report_type": "profile", "minimal": resolved_minimal},
+                metadata=metadata,
             )
             return _log_profile_result(
                 result,
@@ -149,6 +196,6 @@ def profile(
         },
         artifacts=artifacts,
         report=report,
-        metadata={"report_type": "profile", "minimal": resolved_minimal},
+        metadata=metadata,
     )
     return _log_profile_result(result, html_path=None, experiment_name=experiment_name)
