@@ -10,7 +10,7 @@ from typing import Any
 import pandas as pd
 
 from lumosai.exceptions import LumosConfigurationError, LumosOptionalDependencyError
-from lumosai.results import LumosResult
+from lumosai.results import LumosResult, LumosRun
 from lumosai.settings import Settings, settings
 
 
@@ -89,6 +89,30 @@ def log_result(
         if loaded_settings.mlflow.log_dicts:
             mlflow.log_dict(result.to_dict(), "lumosai_result.json")
     return result
+
+
+def log_run(
+    run: LumosRun,
+    *,
+    experiment_name: str | None = None,
+    loaded_settings: Settings = settings,
+) -> LumosRun:
+    resolved = resolve_experiment_name(experiment_name, loaded_settings)
+    if resolved is None:
+        run.metadata["logged_to_mlflow"] = False
+        return run
+
+    with mlflow_run(resolved, loaded_settings) as (mlflow, run_id):
+        if mlflow is None:
+            run.metadata["logged_to_mlflow"] = False
+            return run
+        run.metadata["logged_to_mlflow"] = True
+        run.metadata["mlflow_run_id"] = run_id
+        if run.metrics:
+            mlflow.log_metrics(run.metrics)
+        if loaded_settings.mlflow.log_dicts:
+            mlflow.log_dict(run.to_dict(), "lumosai_run.json")
+    return run
 
 
 def log_sample(
