@@ -16,6 +16,7 @@ _INFERRED_LABEL_WARNING = (
     "Multiclass score_labels were inferred by sorted labels; "
     "pass score_labels to match model.classes_."
 )
+_ROW_SUM_ATOL = 1e-8
 
 
 @dataclass(slots=True)
@@ -25,6 +26,7 @@ class ClassificationScores:
     labels_inferred: bool
     positive_label: Any | None
     source: Literal["column", "array", "mapping"]
+    warning: str | None = None
 
     def metadata(self) -> dict[str, Any]:
         metadata: dict[str, Any] = {
@@ -33,8 +35,8 @@ class ClassificationScores:
         }
         if self.positive_label is not None:
             metadata["positive_label"] = self.positive_label
-        if self.labels_inferred:
-            metadata["score_label_warning"] = _INFERRED_LABEL_WARNING
+        if self.warning is not None:
+            metadata["score_label_warning"] = self.warning
         return metadata
 
     def label_index(self, label: Any) -> int:
@@ -84,6 +86,29 @@ def _as_score_matrix(series: pd.Series) -> np.ndarray:
         raise LumosValidationError(msg) from exc
 
 
+def _is_null_label(label: Any) -> bool:
+    try:
+        result = pd.isna(label)
+    except (TypeError, ValueError):
+        return False
+    if isinstance(result, bool | np.bool_):
+        return bool(result)
+    return False
+
+
+def _labels_equal(left: Any, right: Any) -> bool:
+    try:
+        result = left == right
+    except (TypeError, ValueError):
+        return False
+    if isinstance(result, bool | np.bool_):
+        return bool(result)
+    try:
+        return bool(np.asarray(result).all())
+    except (TypeError, ValueError):
+        return False
+
+
 def _labels_from_score_labels(score_labels: list[Any] | None) -> list[Any] | None:
     if score_labels is None:
         return None
@@ -91,10 +116,26 @@ def _labels_from_score_labels(score_labels: list[Any] | None) -> list[Any] | Non
     if len(labels) < 2:
         msg = "score_labels must contain at least two labels"
         raise LumosValidationError(msg)
-    if len(set(map(repr, labels))) != len(labels):
-        msg = "score_labels must not contain duplicates"
-        raise LumosValidationError(msg)
+    for index, label in enumerate(labels):
+        if _is_null_label(label):
+            msg = "score_labels must not contain null labels"
+            raise LumosValidationError(msg)
+        if any(_labels_equal(label, existing) for existing in labels[:index]):
+            msg = "score_labels must not contain duplicates"
+            raise LumosValidationError(msg)
     return labels
+
+
+def _validate_probability_values(values: np.ndarray) -> None:
+    if not np.isfinite(values).all() or (values < 0).any() or (values > 1).any():
+        msg = "prediction_score values must be finite probabilities in [0, 1]"
+        raise LumosValidationError(msg)
+
+
+def _validate_probability_rows_sum_to_one(values: np.ndarray) -> None:
+    if not np.allclose(values.sum(axis=1), 1.0, atol=_ROW_SUM_ATOL):
+        msg = "prediction_score probability rows must sum to 1"
+        raise LumosValidationError(msg)
 
 
 def _normalize_mapping_scores(
@@ -104,6 +145,9 @@ def _normalize_mapping_scores(
     score_labels: list[Any] | None,
 ) -> ClassificationScores:
     labels = list(prediction_score)
+    if len(labels) < 2:
+        msg = "prediction_score mapping must contain at least two labels"
+        raise LumosValidationError(msg)
     explicit_labels = _labels_from_score_labels(score_labels)
     if explicit_labels is not None and explicit_labels != labels:
         msg = "score_labels must match prediction_score mapping keys and order"
@@ -115,6 +159,8 @@ def _normalize_mapping_scores(
     except (TypeError, ValueError) as exc:
         msg = "prediction_score mapping columns must contain numeric probabilities"
         raise LumosValidationError(msg) from exc
+    _validate_probability_values(values)
+    _validate_probability_rows_sum_to_one(values)
     positive_label = labels[-1] if len(labels) == 2 else None
     return ClassificationScores(
         values=values,
@@ -146,6 +192,7 @@ def normalize_classification_scores(
     explicit_labels = _labels_from_score_labels(score_labels)
 
     if raw_values.shape[1] == 1:
+        _validate_probability_values(raw_values)
         labels = explicit_labels or _infer_sorted_labels(
             frame, target=target, prediction=prediction
         )
@@ -171,10 +218,13 @@ def normalize_classification_scores(
             f"width={raw_values.shape[1]}, labels={len(labels)}"
         )
         raise LumosValidationError(msg)
+    _validate_probability_values(raw_values)
+    _validate_probability_rows_sum_to_one(raw_values)
     return ClassificationScores(
         values=raw_values,
         labels=labels,
         labels_inferred=labels_inferred,
         positive_label=labels[-1] if len(labels) == 2 else None,
         source="array",
+        warning=_INFERRED_LABEL_WARNING if labels_inferred and len(labels) > 2 else None,
     )

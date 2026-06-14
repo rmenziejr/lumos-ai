@@ -33,6 +33,47 @@ def test_binary_1d_scores_infer_positive_label_from_sorted_labels() -> None:
         np.array([[0.9, 0.1], [0.1, 0.9], [0.6, 0.4], [0.8, 0.2]]),
     )
     assert scores.metadata()["score_labels_inferred"] is True
+    assert "score_label_warning" not in scores.metadata()
+
+
+@pytest.mark.parametrize("score", [-0.1, 1.1])
+def test_binary_1d_scores_reject_values_outside_probability_bounds(
+    score: float,
+) -> None:
+    frame = pd.DataFrame(
+        {
+            "actual": [0, 1],
+            "prediction": [0, 1],
+            "score": [0.2, score],
+        }
+    )
+
+    with pytest.raises(LumosValidationError, match="finite probabilities in \\[0, 1\\]"):
+        normalize_classification_scores(
+            frame,
+            target="actual",
+            prediction="prediction",
+            prediction_score="score",
+        )
+
+
+@pytest.mark.parametrize("score", [np.nan, np.inf])
+def test_binary_1d_scores_reject_non_finite_values(score: float) -> None:
+    frame = pd.DataFrame(
+        {
+            "actual": [0, 1],
+            "prediction": [0, 1],
+            "score": [0.2, score],
+        }
+    )
+
+    with pytest.raises(LumosValidationError, match="finite probabilities in \\[0, 1\\]"):
+        normalize_classification_scores(
+            frame,
+            target="actual",
+            prediction="prediction",
+            prediction_score="score",
+        )
 
 
 def test_multiclass_array_scores_use_explicit_score_labels() -> None:
@@ -102,6 +143,25 @@ def test_multiclass_array_scores_require_matching_width() -> None:
         )
 
 
+def test_multiclass_array_scores_require_rows_to_sum_to_one() -> None:
+    frame = pd.DataFrame(
+        {
+            "actual": ["bronze", "silver", "gold"],
+            "prediction": ["silver", "silver", "gold"],
+            "score": [[0.2, 0.7, 0.3], [0.1, 0.8, 0.1], [0.1, 0.2, 0.7]],
+        }
+    )
+
+    with pytest.raises(LumosValidationError, match="sum to 1"):
+        normalize_classification_scores(
+            frame,
+            target="actual",
+            prediction="prediction",
+            prediction_score="score",
+            score_labels=["bronze", "silver", "gold"],
+        )
+
+
 def test_unsortable_labels_require_score_labels() -> None:
     frame = pd.DataFrame(
         {
@@ -160,6 +220,84 @@ def test_probability_mapping_rejects_mismatched_score_labels() -> None:
             prediction="prediction",
             prediction_score={"bronze": "p_bronze", "gold": "p_gold"},
             score_labels=["gold", "bronze"],
+        )
+
+
+def test_probability_mapping_scores_require_rows_to_sum_to_one() -> None:
+    frame = pd.DataFrame(
+        {
+            "actual": ["bronze", "gold"],
+            "prediction": ["bronze", "gold"],
+            "p_bronze": [0.8, 0.2],
+            "p_gold": [0.3, 0.8],
+        }
+    )
+
+    with pytest.raises(LumosValidationError, match="sum to 1"):
+        normalize_classification_scores(
+            frame,
+            target="actual",
+            prediction="prediction",
+            prediction_score={"bronze": "p_bronze", "gold": "p_gold"},
+        )
+
+
+@pytest.mark.parametrize("prediction_score", [{}, {"gold": "p_gold"}])
+def test_probability_mapping_requires_at_least_two_labels(
+    prediction_score: dict[str, str],
+) -> None:
+    frame = pd.DataFrame(
+        {
+            "actual": ["gold"],
+            "prediction": ["gold"],
+            "p_gold": [1.0],
+        }
+    )
+
+    with pytest.raises(LumosValidationError, match="at least two labels"):
+        normalize_classification_scores(
+            frame,
+            target="actual",
+            prediction="prediction",
+            prediction_score=prediction_score,
+        )
+
+
+def test_score_labels_reject_null_labels() -> None:
+    frame = pd.DataFrame(
+        {
+            "actual": ["no", "yes"],
+            "prediction": ["no", "yes"],
+            "score": [0.2, 0.8],
+        }
+    )
+
+    with pytest.raises(LumosValidationError, match="must not contain null labels"):
+        normalize_classification_scores(
+            frame,
+            target="actual",
+            prediction="prediction",
+            prediction_score="score",
+            score_labels=[None, "yes"],
+        )
+
+
+def test_score_labels_reject_duplicate_equivalent_labels() -> None:
+    frame = pd.DataFrame(
+        {
+            "actual": [1, 1.0],
+            "prediction": [1, 1.0],
+            "score": [0.2, 0.8],
+        }
+    )
+
+    with pytest.raises(LumosValidationError, match="must not contain duplicates"):
+        normalize_classification_scores(
+            frame,
+            target="actual",
+            prediction="prediction",
+            prediction_score="score",
+            score_labels=[1, 1.0],
         )
 
 
