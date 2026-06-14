@@ -3,6 +3,7 @@ from __future__ import annotations
 from collections.abc import Callable
 from typing import Any
 
+import numpy as np
 import pandas as pd
 
 from lumosai.data.ingest import to_pandas
@@ -16,7 +17,7 @@ def _score_values(current_pd: pd.DataFrame, prediction_score: str | None) -> Any
     if prediction_score is None:
         return None
     scores = current_pd[prediction_score]
-    if scores.map(lambda value: isinstance(value, list | tuple)).all():
+    if scores.map(lambda value: isinstance(value, list | tuple | np.ndarray)).all():
         return scores.tolist()
     return scores
 
