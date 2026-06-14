@@ -2,6 +2,8 @@
 
 `lumosai` is a reporting SDK. The orchestrator owns scheduling, joins, storage, retries, credentials, and promotion rules. Pass prepared dataframes to `lumosai` at the points where you want profiling, drift, performance, bias, sample, or importance results.
 
+Use the low-level primitives directly while developing, debugging, testing, or building custom pipeline steps. They make each report boundary explicit and are easy to unit test. When the monitoring flow is stable enough for scheduled production runs, promote the same prepared inputs to `monitoring_report()` so sampling, drift, optional performance, optional bias, fail-fast validation, result grouping, and MLflow bundle logging happen consistently.
+
 ## Data Pipeline
 
 Use data pipeline jobs to validate and profile the feature table that downstream training or scoring jobs will consume.
@@ -88,6 +90,8 @@ feature_importance(
 
 Use monitoring jobs to compare each production window against the training benchmark. Optionally compare the same current window against the previous production window to distinguish long-term drift from short-term movement.
 
+During development, the primitive calls keep each report isolated:
+
 ```python
 from lumosai.data import drift_report
 from lumosai.model import bias_report, performance_report
@@ -129,3 +133,25 @@ bias_report(
 ```
 
 Drift uses comparison labels such as `benchmark` and `previous_window` in metric namespaces. Performance and bias trend through MLflow over time as each scheduled run logs another result. Run performance when labels arrive, and run bias only when protected attributes are available and permitted for the monitoring purpose.
+
+For the scheduled production version, use `monitoring_report()` to run the same monitoring shape as one bundle:
+
+```python
+from lumosai import monitoring_report
+
+run = monitoring_report(
+    current_window_with_labels,
+    benchmark=train_benchmark,
+    previous_window=previous_window,
+    target="actual",
+    prediction="prediction",
+    prediction_score="prediction_score",
+    protected_attribute=["region", "segment"],
+    feature_columns=feature_columns,
+    temporal_features=["event_date"],
+    report_name="Churn Monitoring",
+    experiment_name="model-monitoring",
+)
+```
+
+The bundle returns a grouped `LumosRun` and logs one combined run artifact when MLflow dictionary logging is enabled.

@@ -15,6 +15,7 @@ nav:
       - Data Pipeline Monitoring: recipes/data-pipeline-monitoring.md
       - Training Pipeline Reporting: recipes/training-pipeline-reporting.md
       - Ongoing Monitoring Pipeline: recipes/ongoing-monitoring-pipeline.md
+      - Monitoring Bundle: recipes/monitoring-bundle.md
       - Representative Samples: recipes/representative-samples.md
       - Feature Importance: recipes/feature-importance.md
       - Pipeline Patterns: recipes/pipeline-patterns.md

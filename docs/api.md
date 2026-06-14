@@ -15,6 +15,22 @@ Fields:
 
 Use `result.to_dict()` for JSON-safe output.
 
+## `LumosRun`
+
+Bundle functions return `LumosRun`.
+
+Fields:
+
+- `run_type`: logical bundle type, such as `"monitoring"`.
+- `results`: child `LumosResult` objects keyed by stable report names.
+- `metadata`: bundle-level details such as `report_name` and skipped reports.
+
+Properties and methods:
+
+- `run.metrics`: merged metrics from all child results.
+- `run.flagged`: flagged findings from all child results, annotated with `result_key`.
+- `run.to_dict()`: JSON-safe grouped output for logging, APIs, or persisted summaries.
+
 ## Shared Report Parameters
 
 Most report functions accept:
@@ -185,6 +201,50 @@ Allowed `report` keys:
 
 When `feature_columns` is provided, `evidently_kwargs["preset"]["columns"]` must match it.
 
+## Bundle APIs
+
+### `monitoring_report(...)`
+
+```python
+monitoring_report(
+    current,
+    *,
+    benchmark,
+    previous_window=None,
+    target=None,
+    prediction=None,
+    prediction_score=None,
+    feature_columns=None,
+    categorical_columns=None,
+    protected_attribute=None,
+    temporal_features=None,
+    time_column=None,
+    sample_size=None,
+    include_performance=None,
+    include_bias=None,
+    report_name=None,
+    experiment_name=None,
+    loaded_settings=settings,
+)
+```
+
+Builds the standard production monitoring bundle and returns a `LumosRun`.
+
+- Always builds a `monitoring_window` sample from `current`.
+- Always runs benchmark drift from `benchmark` to `current` as `drift_benchmark`.
+- Runs previous-window drift as `drift_previous_window` when `previous_window` is provided and `settings.bundles.include_previous_window_drift` is `True`.
+- Runs performance when both `target` and `prediction` are provided, or when `include_performance=True`.
+- Runs bias when `protected_attribute` is provided, or when `include_bias=True`.
+- Uses `prediction_score` for supported performance and bias metrics when provided.
+- Uses `feature_columns` as drift and report analysis columns. Pass temporal columns with `temporal_features` or `time_column`, not in `feature_columns`.
+- Uses `categorical_columns` as semantic categorical overrides and requires them to be included in `feature_columns` when `feature_columns` is provided.
+- Uses `sample_size` for the monitoring window sample.
+- Uses `report_name` as the base display name for child reports.
+- Uses `experiment_name`, or `loaded_settings.mlflow.default_experiment_name`, to log the whole bundle in one MLflow run.
+- Uses `loaded_settings` for bundle and MLflow settings. By default this is the global `settings` object.
+
+Fail-fast validation runs before report generation. The bundle validates required input columns, temporal drift columns, performance inputs, and bias inputs before starting expensive report work. `monitoring_report()` currently requires `loaded_settings.bundles.fail_fast=True`.
+
 ## Model APIs
 
 ### `get_metrics(...)`
@@ -311,3 +371,4 @@ The main settings groups are:
 - `settings.mlflow`
 - `settings.data`
 - `settings.model`
+- `settings.bundles`
