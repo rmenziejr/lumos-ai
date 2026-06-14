@@ -46,3 +46,77 @@ def test_bias_report_bins_continuous_protected_attribute() -> None:
 
     assert "age" in result.summary["by_attribute"]
     assert len(result.summary["by_attribute"]["age"]["by_group"]) == 2
+
+
+def test_bias_report_handles_string_positive_labels() -> None:
+    frame = pd.DataFrame(
+        {
+            "actual": ["yes", "yes", "yes", "yes", "no", "no"],
+            "prediction": ["yes", "yes", "no", "no", "no", "no"],
+            "segment": ["a", "a", "b", "b", "b", "b"],
+        }
+    )
+
+    result = bias_report(
+        frame,
+        target="actual",
+        prediction="prediction",
+        protected_attribute=["segment"],
+        task_type="classification",
+    )
+
+    groups = {
+        row["group"]: row["positive_prediction_rate"]
+        for row in result.summary["by_attribute"]["segment"]["by_group"]
+    }
+    assert groups == {"a": 1.0, "b": 0.0}
+    assert any(flag["metric"] == "positive_prediction_rate" for flag in result.flagged)
+
+
+def test_bias_report_keeps_out_of_bin_and_missing_groups() -> None:
+    frame = pd.DataFrame(
+        {
+            "actual": [1, 1, 0, 0, 1],
+            "prediction": [1, 1, 0, 0, 0],
+            "age": [-5, 22, 62, 130, None],
+        }
+    )
+
+    result = bias_report(
+        frame,
+        target="actual",
+        prediction="prediction",
+        protected_attribute={"age": [0, 40, 120]},
+        task_type="classification",
+    )
+
+    groups = {
+        row["group"] for row in result.summary["by_attribute"]["age"]["by_group"]
+    }
+    assert "__out_of_bin__" in groups
+
+
+def test_bias_report_treats_regression_error_as_lower_is_better() -> None:
+    frame = pd.DataFrame(
+        {
+            "actual": [1.0, 2.0, 1.0, 2.0],
+            "prediction": [1.0, 2.0, 8.0, 9.0],
+            "segment": ["a", "a", "b", "b"],
+        }
+    )
+
+    result = bias_report(
+        frame,
+        target="actual",
+        prediction="prediction",
+        protected_attribute=["segment"],
+        task_type="regression",
+    )
+
+    flags = [
+        flag
+        for flag in result.flagged
+        if flag["metric"] in {"mae", "rmse", "abs_mean_residual", "mean_absolute_residual"}
+    ]
+    assert flags
+    assert all(flag["group"] == "b" for flag in flags)

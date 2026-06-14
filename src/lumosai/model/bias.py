@@ -3,6 +3,7 @@ from __future__ import annotations
 from collections.abc import Callable
 from typing import Any
 
+import numpy as np
 import pandas as pd
 
 from lumosai.data.ingest import to_pandas
@@ -11,7 +12,7 @@ from lumosai.mlflow import log_result
 from lumosai.model.metrics import TaskType, compare_metric, detect_task_type, get_metrics
 from lumosai.model.validation import validate_prediction_frame
 from lumosai.results import LumosResult
-from lumosai.settings import settings
+from lumosai.settings import MetricThreshold, settings
 
 ProtectedAttribute = list[str] | dict[str, list[float] | None]
 
@@ -26,12 +27,105 @@ def _normalize_protected_attribute(
 
 def _group_series(df: pd.DataFrame, column: str, bins: list[float] | None) -> pd.Series:
     if bins is None:
-        return df[column].astype("object")
-    return pd.cut(df[column], bins=bins, include_lowest=True).astype("object")
+        return df[column].astype("object").where(df[column].notna(), "__missing__")
+    cut = pd.cut(df[column], bins=bins, include_lowest=True)
+    return cut.astype("object").where(cut.notna(), "__out_of_bin__")
 
 
 def _best_value(values: list[float], *, greater_is_better: bool) -> float:
     return max(values) if greater_is_better else min(values)
+
+
+def _fallback_threshold(metric_name: str) -> MetricThreshold | None:
+    threshold = settings.model.metric_thresholds.get(metric_name)
+    if threshold is not None:
+        return threshold
+    if metric_name in {"abs_mean_residual", "mean_absolute_residual"}:
+        return MetricThreshold(mode="relative", value=1.25, greater_is_better=False)
+    return None
+
+
+def _is_finite(value: Any) -> bool:
+    try:
+        return bool(np.isfinite(float(value)))
+    except (TypeError, ValueError):
+        return False
+
+
+def _binary_favorable_label(y_true: pd.Series, y_pred: pd.Series) -> Any | None:
+    labels = pd.concat([y_true, y_pred], ignore_index=True).dropna().unique().tolist()
+    if len(labels) != 2:
+        return None
+
+    for candidate in (1, True):
+        if candidate in labels:
+            return candidate
+
+    favorable_names = {"yes", "true", "positive", "pos", "approved", "approve"}
+    for label in labels:
+        if str(label).casefold() in favorable_names:
+            return label
+
+    return sorted(labels, key=lambda value: str(value))[-1]
+
+
+def _group_y_score(
+    group_df: pd.DataFrame,
+    target: str,
+    prediction_score: str | None,
+    resolved_task: TaskType,
+) -> pd.Series | None:
+    if prediction_score is None:
+        return None
+    if resolved_task == "classification" and group_df[target].nunique(dropna=True) < 2:
+        return None
+    return group_df[prediction_score]
+
+
+def _finite_metric_rows(
+    by_group: list[dict[str, Any]],
+    metric_name: str,
+) -> list[tuple[dict[str, Any], float]]:
+    return [
+        (row, float(row[metric_name]))
+        for row in by_group
+        if metric_name in row and _is_finite(row[metric_name])
+    ]
+
+
+def _parity_comparisons(
+    metric_name: str,
+    by_group: list[dict[str, Any]],
+    *,
+    threshold: MetricThreshold | None,
+    protected_attribute: str,
+) -> list[dict[str, Any]]:
+    finite_rows = _finite_metric_rows(by_group, metric_name)
+    if len(finite_rows) < 2:
+        return []
+
+    values = [value for _, value in finite_rows]
+    max_value = max(values)
+    min_value = min(values)
+    ratio = 1.0 if max_value == 0 else min_value / max_value
+    resolved = threshold or MetricThreshold(mode="relative", value=0.8, greater_is_better=True)
+    flagged = ratio < resolved.value
+
+    return [
+        {
+            "metric": metric_name,
+            "comparison_mode": "parity",
+            "group": row["group"],
+            "protected_attribute": protected_attribute,
+            "group_value": value,
+            "max_value": float(max_value),
+            "min_value": float(min_value),
+            "ratio": float(ratio),
+            "threshold": float(resolved.value),
+            "flagged": bool(flagged),
+        }
+        for row, value in finite_rows
+    ]
 
 
 def bias_report(
@@ -62,22 +156,29 @@ def bias_report(
         groups = _group_series(current_pd, attribute, bins)
         working = current_pd.assign(_lumos_group=groups)
         by_group: list[dict[str, Any]] = []
+        favorable_label = (
+            _binary_favorable_label(current_pd[target], current_pd[prediction])
+            if resolved_task == "classification"
+            else None
+        )
 
         for group_name, group_df in working.groupby("_lumos_group", observed=False):
             metric_values = get_metrics(
                 group_df[target],
                 group_df[prediction],
-                y_score=group_df[prediction_score] if prediction_score is not None else None,
+                y_score=_group_y_score(group_df, target, prediction_score, resolved_task),
                 task_type=resolved_task,
                 custom_metrics=custom_metrics,
             )
             if resolved_task == "classification":
-                metric_values["positive_prediction_rate"] = float(
-                    pd.Series(group_df[prediction]).mean()
-                )
+                if favorable_label is not None:
+                    metric_values["positive_prediction_rate"] = float(
+                        (group_df[prediction] == favorable_label).mean()
+                    )
             else:
                 residual = group_df[prediction] - group_df[target]
                 metric_values["mean_residual"] = float(residual.mean())
+                metric_values["abs_mean_residual"] = float(abs(residual.mean()))
                 metric_values["mean_absolute_residual"] = float(residual.abs().mean())
 
             by_group.append(
@@ -89,14 +190,32 @@ def bias_report(
             [key for key in by_group[0] if key not in {"group", "count"}] if by_group else []
         )
         for metric_name in metric_names:
-            threshold = settings.model.metric_thresholds.get(metric_name)
+            if metric_name == "mean_residual":
+                continue
+            threshold = _fallback_threshold(metric_name)
+            if metric_name == "positive_prediction_rate":
+                parity_comparisons = _parity_comparisons(
+                    metric_name,
+                    by_group,
+                    threshold=threshold,
+                    protected_attribute=attribute,
+                )
+                comparisons.extend(parity_comparisons)
+                flagged.extend(
+                    comparison for comparison in parity_comparisons if comparison["flagged"]
+                )
+                continue
+
             greater_is_better = threshold.greater_is_better if threshold is not None else True
-            values = [float(row[metric_name]) for row in by_group]
+            finite_rows = _finite_metric_rows(by_group, metric_name)
+            if len(finite_rows) < 2:
+                continue
+            values = [value for _, value in finite_rows]
             best = _best_value(values, greater_is_better=greater_is_better)
-            for row in by_group:
+            for row, value in finite_rows:
                 comparison = compare_metric(
                     metric_name,
-                    group_value=float(row[metric_name]),
+                    group_value=value,
                     best_value=best,
                     threshold=threshold,
                 )
