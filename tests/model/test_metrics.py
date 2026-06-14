@@ -4,6 +4,7 @@ import pandas as pd
 import pytest
 
 from lumosai.model.metrics import compare_metric, detect_task_type, get_metrics
+from lumosai.model.validation import validate_prediction_frame
 from lumosai.settings import MetricThreshold
 
 
@@ -31,6 +32,37 @@ def test_get_metrics_classification_uses_scores_for_roc_auc() -> None:
     assert metrics["recall"] == 1.0
     assert metrics["f1"] == 1.0
     assert metrics["roc_auc"] == 1.0
+
+
+def test_get_metrics_classification_handles_string_labels() -> None:
+    metrics = get_metrics(
+        y_true=["no", "yes", "yes", "no"],
+        y_pred=["no", "yes", "no", "no"],
+        task_type="classification",
+    )
+
+    assert metrics["accuracy"] == 0.75
+    assert metrics["precision"] == pytest.approx(0.8333333333)
+    assert metrics["recall"] == 0.75
+    assert metrics["f1"] == pytest.approx(0.7333333333)
+
+
+def test_get_metrics_multiclass_classification_uses_probability_matrix_for_roc_auc() -> None:
+    metrics = get_metrics(
+        y_true=[0, 1, 2, 1, 2, 0],
+        y_pred=[0, 1, 2, 1, 2, 0],
+        y_score=[
+            [0.9, 0.05, 0.05],
+            [0.1, 0.8, 0.1],
+            [0.05, 0.15, 0.8],
+            [0.1, 0.85, 0.05],
+            [0.05, 0.1, 0.85],
+            [0.8, 0.1, 0.1],
+        ],
+        task_type="classification",
+    )
+
+    assert metrics["roc_auc"] == pytest.approx(1.0)
 
 
 def test_get_metrics_regression() -> None:
@@ -61,3 +93,24 @@ def test_compare_metric_lower_is_better_relative_flag() -> None:
 
     assert comparison["flagged"] is True
     assert comparison["ratio"] == pytest.approx(1.4)
+
+
+def test_compare_metric_relative_uses_absolute_diff_when_baseline_non_positive() -> None:
+    threshold = MetricThreshold(mode="relative", value=0.8, greater_is_better=True)
+
+    comparison = compare_metric("r2", group_value=-0.4, best_value=-0.2, threshold=threshold)
+
+    assert comparison["flagged"] is True
+    assert pd.isna(comparison["ratio"])
+    assert comparison["comparison_mode"] == "absolute_fallback"
+
+
+def test_validate_prediction_frame_accepts_required_columns() -> None:
+    frame = pd.DataFrame({"actual": [1], "prediction": [1], "score": [0.9]})
+
+    validate_prediction_frame(
+        frame,
+        target="actual",
+        prediction="prediction",
+        prediction_score="score",
+    )

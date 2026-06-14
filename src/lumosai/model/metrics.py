@@ -38,7 +38,7 @@ def detect_task_type(
 def get_metrics(
     y_true: Sequence[Any] | pd.Series,
     y_pred: Sequence[Any] | pd.Series,
-    y_score: Sequence[float] | pd.Series | None = None,
+    y_score: Sequence[Any] | pd.Series | None = None,
     task_type: TaskType | None = None,
     custom_metrics: list[tuple[str, Callable[..., float]]] | None = None,
 ) -> dict[str, float]:
@@ -46,7 +46,7 @@ def get_metrics(
     metrics: dict[str, float] = {}
 
     if resolved_task == "classification":
-        average = "binary" if pd.Series(y_true).nunique(dropna=True) <= 2 else "weighted"
+        average = "weighted"
         zero_division = 0
         metrics["accuracy"] = float(accuracy_score(y_true, y_pred))
         metrics["precision"] = float(
@@ -59,7 +59,7 @@ def get_metrics(
             f1_score(y_true, y_pred, average=average, zero_division=zero_division)
         )
         if y_score is not None:
-            metrics["roc_auc"] = float(roc_auc_score(y_true, y_score))
+            metrics["roc_auc"] = _roc_auc(y_true, y_score)
     else:
         metrics["mae"] = float(mean_absolute_error(y_true, y_pred))
         metrics["rmse"] = float(root_mean_squared_error(y_true, y_pred))
@@ -69,6 +69,19 @@ def get_metrics(
         metrics[name] = float(metric_func(y_true, y_pred))
 
     return metrics
+
+
+def _roc_auc(y_true: Sequence[Any] | pd.Series, y_score: Sequence[Any] | pd.Series) -> float:
+    labels = pd.Series(y_true).dropna().unique()
+    score_array = np.asarray(y_score)
+    if len(labels) <= 2:
+        if score_array.ndim == 2:
+            if score_array.shape[1] != 2:
+                msg = "binary y_score must be one-dimensional or have two probability columns"
+                raise ValueError(msg)
+            score_array = score_array[:, 1]
+        return float(roc_auc_score(y_true, score_array))
+    return float(roc_auc_score(y_true, score_array, multi_class="ovr", average="weighted"))
 
 
 def compare_metric(
@@ -86,16 +99,24 @@ def compare_metric(
         diff = group_value - best_value
         flagged = diff < -resolved.value if resolved.greater_is_better else diff > resolved.value
         ratio = np.nan
+        comparison_mode = "absolute"
     else:
-        if best_value == 0:
-            ratio = np.inf if group_value != 0 else 1.0
+        if best_value <= 0:
+            ratio = np.nan
+            diff = group_value - best_value
+            comparison_mode = "absolute_fallback"
+            flagged = diff < 0 if resolved.greater_is_better else diff > 0
         else:
             ratio = group_value / best_value
-        flagged = ratio < resolved.value if resolved.greater_is_better else ratio > resolved.value
-        diff = group_value - best_value
+            comparison_mode = "relative"
+            flagged = (
+                ratio < resolved.value if resolved.greater_is_better else ratio > resolved.value
+            )
+            diff = group_value - best_value
 
     return {
         "metric": metric,
+        "comparison_mode": comparison_mode,
         "group_value": float(group_value),
         "best_value": float(best_value),
         "diff": float(diff),
