@@ -5,6 +5,10 @@ It provides simple function-first APIs for profiling, drift, performance, and bi
 
 ## Recipes
 
+- [Documentation home](docs/index.md)
+- [Getting started](docs/getting-started.md)
+- [API reference](docs/api.md)
+- [Development guide](docs/development.md)
 - [Data pipeline monitoring](docs/recipes/data-pipeline-monitoring.md)
 - [Training pipeline reporting](docs/recipes/training-pipeline-reporting.md)
 - [Ongoing monitoring pipeline](docs/recipes/ongoing-monitoring-pipeline.md)
