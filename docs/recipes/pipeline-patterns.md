@@ -63,7 +63,6 @@ performance_report(
     holdout_sample.artifacts["sample"],
     target="actual",
     prediction="prediction",
-    prediction_score="prediction_score",
     feature_columns=feature_columns,
     experiment_name="model-training",
 )
