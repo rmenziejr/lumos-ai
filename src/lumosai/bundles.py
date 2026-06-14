@@ -1,13 +1,19 @@
 from __future__ import annotations
 
+from contextlib import nullcontext
 from typing import Any
 
 import pandas as pd
 
+from lumosai.data.drift import drift_report
 from lumosai.data.ingest import to_pandas
+from lumosai.data.sampling import build_sample
 from lumosai.data.validation import require_columns
 from lumosai.exceptions import LumosValidationError
-from lumosai.results import LumosRun
+from lumosai.mlflow import log_run, mlflow_run, resolve_experiment_name
+from lumosai.model.bias import bias_report
+from lumosai.model.performance import performance_report
+from lumosai.results import LumosResult, LumosRun
 
 
 def _resolve_temporal_features(
@@ -47,6 +53,14 @@ def _protected_columns(
     if isinstance(protected_attribute, dict):
         return list(protected_attribute)
     return list(protected_attribute)
+
+
+def _bias_protected_attribute(
+    protected_attribute: str | list[str] | dict[str, list[float]],
+) -> list[str] | dict[str, list[float]]:
+    if isinstance(protected_attribute, str):
+        return [protected_attribute]
+    return protected_attribute
 
 
 def _preflight_monitoring_report(
@@ -142,13 +156,95 @@ def monitoring_report(
         include_performance=include_performance,
         include_bias=include_bias,
     )
-    return LumosRun(
-        run_type="monitoring",
-        results={},
-        metadata={
-            "report_name": report_name,
-            "skipped_reports": {},
-            "sample_size": sample_size,
-            "experiment_name": experiment_name,
-        },
+    resolved_experiment = resolve_experiment_name(experiment_name)
+    run_context = (
+        mlflow_run(resolved_experiment) if resolved_experiment else nullcontext((None, None))
     )
+    results: dict[str, LumosResult] = {}
+    skipped_reports: dict[str, str] = {}
+
+    with run_context:
+        results["monitoring_window"] = build_sample(
+            current_pd,
+            role="monitoring_window",
+            sample_size=sample_size,
+            feature_columns=feature_columns,
+            categorical_columns=categorical_columns,
+            time_column=time_column,
+            experiment_name=resolved_experiment,
+        )
+        results["drift_benchmark"] = drift_report(
+            benchmark_pd,
+            current_pd,
+            temporal_features=resolved_temporal_features,
+            feature_columns=feature_columns,
+            categorical_columns=categorical_columns,
+            comparison="benchmark",
+            report_name=f"{report_name} Benchmark Drift" if report_name else None,
+            experiment_name=resolved_experiment,
+        )
+        if previous_pd is not None:
+            results["drift_previous_window"] = drift_report(
+                previous_pd,
+                current_pd,
+                temporal_features=resolved_temporal_features,
+                feature_columns=feature_columns,
+                categorical_columns=categorical_columns,
+                comparison="previous_window",
+                report_name=f"{report_name} Previous Window Drift" if report_name else None,
+                experiment_name=resolved_experiment,
+            )
+        else:
+            skipped_reports["drift_previous_window"] = "previous_window not provided"
+
+        if _performance_expected(
+            target=target,
+            prediction=prediction,
+            include_performance=include_performance,
+        ):
+            assert target is not None
+            assert prediction is not None
+            results["performance"] = performance_report(
+                current_pd,
+                target=target,
+                prediction=prediction,
+                prediction_score=prediction_score,
+                report_name=f"{report_name} Performance" if report_name else None,
+                feature_columns=feature_columns,
+                categorical_columns=categorical_columns,
+                experiment_name=resolved_experiment,
+            )
+        else:
+            skipped_reports["performance"] = "target and prediction not provided"
+
+        if _bias_expected(
+            protected_attribute=protected_attribute,
+            include_bias=include_bias,
+        ):
+            assert target is not None
+            assert prediction is not None
+            assert protected_attribute is not None
+            results["bias"] = bias_report(
+                current_pd,
+                target=target,
+                prediction=prediction,
+                protected_attribute=_bias_protected_attribute(protected_attribute),
+                prediction_score=prediction_score,
+                report_name=f"{report_name} Bias" if report_name else None,
+                feature_columns=feature_columns,
+                categorical_columns=categorical_columns,
+                experiment_name=resolved_experiment,
+            )
+        else:
+            skipped_reports["bias"] = "protected_attribute not provided"
+
+        run = LumosRun(
+            run_type="monitoring",
+            results=results,
+            metadata={
+                "report_name": report_name,
+                "skipped_reports": skipped_reports,
+            },
+        )
+        log_run(run, experiment_name=resolved_experiment)
+        return run

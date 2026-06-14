@@ -52,3 +52,55 @@ def test_monitoring_report_requires_protected_attribute_when_bias_enabled() -> N
             include_bias=True,
             feature_columns=["amount", "age"],
         )
+
+
+def test_monitoring_report_runs_sample_drift_and_performance() -> None:
+    result = monitoring_report(
+        make_monitoring_frame(),
+        benchmark=make_monitoring_frame(),
+        target="target",
+        prediction="prediction",
+        temporal_features=["event_date"],
+        feature_columns=["amount", "age"],
+        sample_size=3,
+        report_name="daily-monitoring",
+    )
+
+    assert result.run_type == "monitoring"
+    assert set(result.results) == {
+        "monitoring_window",
+        "drift_benchmark",
+        "performance",
+    }
+    assert result.results["monitoring_window"].metadata["sample_role"] == "monitoring_window"
+    assert result.results["drift_benchmark"].metadata["comparison"] == "benchmark"
+    assert result.results["performance"].metadata["report_type"] == "performance"
+    assert result.metadata["report_name"] == "daily-monitoring"
+
+
+def test_monitoring_report_runs_previous_window_drift_when_provided() -> None:
+    result = monitoring_report(
+        make_monitoring_frame(),
+        benchmark=make_monitoring_frame(),
+        previous_window=make_monitoring_frame(),
+        temporal_features=["event_date"],
+        feature_columns=["amount", "age"],
+    )
+
+    assert "drift_previous_window" in result.results
+    assert result.results["drift_previous_window"].metadata["comparison"] == "previous_window"
+
+
+def test_monitoring_report_runs_bias_when_protected_attribute_provided() -> None:
+    result = monitoring_report(
+        make_monitoring_frame(),
+        benchmark=make_monitoring_frame(),
+        target="target",
+        prediction="prediction",
+        protected_attribute="region",
+        temporal_features=["event_date"],
+        feature_columns=["amount", "age"],
+    )
+
+    assert "bias" in result.results
+    assert result.results["bias"].metadata["report_type"] == "bias"
