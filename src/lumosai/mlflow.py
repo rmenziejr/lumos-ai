@@ -1,7 +1,8 @@
 from __future__ import annotations
 
-from typing import Any
+from lumosai.results import LumosResult
 
 
-def log_result(result: Any, *, experiment_name: str | None = None) -> Any:
+def log_result(result: LumosResult, *, experiment_name: str | None = None) -> LumosResult:
+    result.metadata["logged_to_mlflow"] = False
     return result

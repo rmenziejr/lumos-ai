@@ -3,11 +3,22 @@ from __future__ import annotations
 from collections.abc import Callable
 from typing import Any
 
+import pandas as pd
+
 from lumosai.data.ingest import to_pandas
 from lumosai.mlflow import log_result
 from lumosai.model.metrics import TaskType, detect_task_type, get_metrics
 from lumosai.model.validation import validate_prediction_frame
 from lumosai.results import LumosResult
+
+
+def _score_values(current_pd: pd.DataFrame, prediction_score: str | None) -> Any:
+    if prediction_score is None:
+        return None
+    scores = current_pd[prediction_score]
+    if scores.map(lambda value: isinstance(value, list | tuple)).all():
+        return scores.tolist()
+    return scores
 
 
 def performance_report(
@@ -30,7 +41,7 @@ def performance_report(
     raw_metrics = get_metrics(
         current_pd[target],
         current_pd[prediction],
-        y_score=current_pd[prediction_score] if prediction_score else None,
+        y_score=_score_values(current_pd, prediction_score),
         task_type=resolved_task,
         custom_metrics=custom_metrics,
     )
