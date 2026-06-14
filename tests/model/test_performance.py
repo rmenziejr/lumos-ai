@@ -4,6 +4,7 @@ import numpy as np
 import pandas as pd
 import pytest
 
+import lumosai.mlflow as mlflow_adapter
 from lumosai.exceptions import LumosOptionalDependencyError
 from lumosai.model.performance import performance_report
 from lumosai.results import LumosResult
@@ -107,8 +108,12 @@ def test_performance_report_uses_empty_string_score_column_name() -> None:
     assert result.metrics["performance/roc_auc"] == 1.0
 
 
-def test_performance_report_requires_mlflow_when_logging_requested() -> None:
+def test_performance_report_requires_mlflow_when_logging_requested(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
     frame = pd.DataFrame({"actual": [1.0, 2.0, 3.0], "prediction": [1.0, 2.5, 2.5]})
+    expected = LumosOptionalDependencyError("missing")
+    monkeypatch.setattr(mlflow_adapter, "require_mlflow", lambda: (_ for _ in ()).throw(expected))
 
     with pytest.raises(LumosOptionalDependencyError):
         performance_report(

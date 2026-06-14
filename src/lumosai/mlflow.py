@@ -80,12 +80,12 @@ def log_result(
         if mlflow is None:
             result.metadata["logged_to_mlflow"] = False
             return result
+        result.metadata["logged_to_mlflow"] = True
+        result.metadata["mlflow_run_id"] = run_id
         if result.metrics:
             mlflow.log_metrics(result.metrics)
         if loaded_settings.mlflow.log_dicts:
             mlflow.log_dict(result.to_dict(), "lumosai_result.json")
-        result.metadata["logged_to_mlflow"] = True
-        result.metadata["mlflow_run_id"] = run_id
     return result
 
 
@@ -96,7 +96,7 @@ def log_artifact_paths(
     loaded_settings: Settings = settings,
 ) -> dict[str, str]:
     resolved = resolve_experiment_name(experiment_name, loaded_settings)
-    if resolved is None:
+    if resolved is None or not loaded_settings.mlflow.log_artifacts:
         return {name: str(path) for name, path in paths.items()}
 
     with mlflow_run(resolved, loaded_settings) as (mlflow, _run_id):
