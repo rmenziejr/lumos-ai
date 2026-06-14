@@ -8,6 +8,7 @@ import pandas as pd
 from sklearn.metrics import (  # type: ignore[import-untyped]
     accuracy_score,
     f1_score,
+    log_loss,
     mean_absolute_error,
     precision_score,
     r2_score,
@@ -39,6 +40,7 @@ def get_metrics(
     y_true: Sequence[Any] | pd.Series,
     y_pred: Sequence[Any] | pd.Series,
     y_score: Sequence[Any] | pd.Series | None = None,
+    score_labels: Sequence[Any] | None = None,
     task_type: TaskType | None = None,
     custom_metrics: list[tuple[str, Callable[..., float]]] | None = None,
 ) -> dict[str, float]:
@@ -59,7 +61,8 @@ def get_metrics(
             f1_score(y_true, y_pred, average=average, zero_division=zero_division)
         )
         if y_score is not None:
-            metrics["roc_auc"] = _roc_auc(y_true, y_score)
+            metrics["roc_auc"] = _roc_auc(y_true, y_score, score_labels)
+            metrics["log_loss"] = _log_loss(y_true, y_score, score_labels)
     else:
         metrics["mae"] = float(mean_absolute_error(y_true, y_pred))
         metrics["rmse"] = float(root_mean_squared_error(y_true, y_pred))
@@ -71,8 +74,16 @@ def get_metrics(
     return metrics
 
 
-def _roc_auc(y_true: Sequence[Any] | pd.Series, y_score: Sequence[Any] | pd.Series) -> float:
-    labels = pd.Series(y_true).dropna().unique()
+def _roc_auc(
+    y_true: Sequence[Any] | pd.Series,
+    y_score: Sequence[Any] | pd.Series,
+    score_labels: Sequence[Any] | None = None,
+) -> float:
+    labels = (
+        list(score_labels)
+        if score_labels is not None
+        else pd.Series(y_true).dropna().unique().tolist()
+    )
     score_array = np.asarray(y_score)
     if len(labels) <= 2:
         if score_array.ndim == 2:
@@ -81,7 +92,40 @@ def _roc_auc(y_true: Sequence[Any] | pd.Series, y_score: Sequence[Any] | pd.Seri
                 raise ValueError(msg)
             score_array = score_array[:, 1]
         return float(roc_auc_score(y_true, score_array))
-    return float(roc_auc_score(y_true, score_array, multi_class="ovr", average="weighted"))
+    ordered_labels, ordered_scores = _scores_in_sklearn_label_order(score_array, labels)
+    return float(
+        roc_auc_score(
+            y_true,
+            ordered_scores,
+            labels=ordered_labels,
+            multi_class="ovr",
+            average="weighted",
+        )
+    )
+
+
+def _log_loss(
+    y_true: Sequence[Any] | pd.Series,
+    y_score: Sequence[Any] | pd.Series,
+    score_labels: Sequence[Any] | None,
+) -> float:
+    score_array = np.asarray(y_score)
+    labels = list(score_labels) if score_labels is not None else None
+    if labels is not None and score_array.ndim == 2:
+        labels, score_array = _scores_in_sklearn_label_order(score_array, labels)
+    return float(log_loss(y_true, score_array, labels=labels))
+
+
+def _scores_in_sklearn_label_order(
+    score_array: np.ndarray,
+    labels: Sequence[Any],
+) -> tuple[list[Any], np.ndarray]:
+    original_labels = list(labels)
+    ordered_labels = sorted(original_labels)
+    if original_labels == ordered_labels:
+        return ordered_labels, score_array
+    column_order = [original_labels.index(label) for label in ordered_labels]
+    return ordered_labels, score_array[:, column_order]
 
 
 def compare_metric(

@@ -1,7 +1,9 @@
 from __future__ import annotations
 
+import numpy as np
 import pandas as pd
 import pytest
+from sklearn.metrics import log_loss
 
 from lumosai.model.metrics import compare_metric, detect_task_type, get_metrics
 from lumosai.model.validation import validate_prediction_frame
@@ -63,6 +65,49 @@ def test_get_metrics_multiclass_classification_uses_probability_matrix_for_roc_a
     )
 
     assert metrics["roc_auc"] == pytest.approx(1.0)
+
+
+def test_get_metrics_adds_log_loss_for_binary_probability_matrix() -> None:
+    y_true = pd.Series([0, 1, 1, 0])
+    y_pred = pd.Series([0, 1, 0, 0])
+    y_score = np.array([[0.9, 0.1], [0.1, 0.9], [0.6, 0.4], [0.8, 0.2]])
+
+    metrics = get_metrics(
+        y_true,
+        y_pred,
+        y_score=y_score,
+        score_labels=[0, 1],
+        task_type="classification",
+    )
+
+    assert metrics["log_loss"] == pytest.approx(log_loss(y_true, y_score, labels=[0, 1]))
+
+
+def test_get_metrics_adds_log_loss_for_multiclass_probability_matrix() -> None:
+    y_true = pd.Series(["bronze", "silver", "gold", "gold"])
+    y_pred = pd.Series(["bronze", "silver", "silver", "gold"])
+    y_score = np.array(
+        [
+            [0.8, 0.1, 0.1],
+            [0.1, 0.8, 0.1],
+            [0.2, 0.5, 0.3],
+            [0.1, 0.1, 0.8],
+        ]
+    )
+
+    metrics = get_metrics(
+        y_true,
+        y_pred,
+        y_score=y_score,
+        score_labels=["bronze", "silver", "gold"],
+        task_type="classification",
+    )
+
+    score_in_sklearn_order = y_score[:, [0, 2, 1]]
+    assert metrics["log_loss"] == pytest.approx(
+        log_loss(y_true, score_in_sklearn_order, labels=["bronze", "gold", "silver"])
+    )
+    assert "roc_auc" in metrics
 
 
 def test_get_metrics_regression() -> None:
