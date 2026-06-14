@@ -178,3 +178,131 @@ def test_performance_report_rejects_categorical_outside_features() -> None:
             categorical_columns=["day_of_week"],
             task_type="classification",
         )
+
+
+def test_performance_report_records_explicit_score_labels_and_log_loss() -> None:
+    df = pd.DataFrame(
+        {
+            "actual": ["bronze", "silver", "gold", "gold"],
+            "prediction": ["bronze", "silver", "silver", "gold"],
+            "score": [
+                [0.8, 0.1, 0.1],
+                [0.1, 0.8, 0.1],
+                [0.2, 0.5, 0.3],
+                [0.1, 0.1, 0.8],
+            ],
+        }
+    )
+
+    result = performance_report(
+        df,
+        target="actual",
+        prediction="prediction",
+        prediction_score="score",
+        score_labels=["bronze", "silver", "gold"],
+        task_type="classification",
+    )
+
+    assert "performance/log_loss" in result.metrics
+    assert result.metadata["score_labels"] == ["bronze", "silver", "gold"]
+    assert result.metadata["score_labels_inferred"] is False
+
+
+def test_performance_report_infers_score_labels_with_warning_metadata() -> None:
+    df = pd.DataFrame(
+        {
+            "actual": ["bronze", "silver", "gold"],
+            "prediction": ["silver", "silver", "gold"],
+            "score": [[0.2, 0.1, 0.7], [0.1, 0.8, 0.1], [0.7, 0.2, 0.1]],
+        }
+    )
+
+    result = performance_report(
+        df,
+        target="actual",
+        prediction="prediction",
+        prediction_score="score",
+        task_type="classification",
+    )
+
+    assert result.metadata["score_labels"] == ["bronze", "gold", "silver"]
+    assert result.metadata["score_labels_inferred"] is True
+    assert "score_label_warning" in result.metadata
+
+
+def test_performance_report_accepts_probability_mapping() -> None:
+    df = pd.DataFrame(
+        {
+            "actual": ["bronze", "gold"],
+            "prediction": ["bronze", "gold"],
+            "p_bronze": [0.8, 0.2],
+            "p_gold": [0.2, 0.8],
+        }
+    )
+
+    result = performance_report(
+        df,
+        target="actual",
+        prediction="prediction",
+        prediction_score={"bronze": "p_bronze", "gold": "p_gold"},
+        task_type="classification",
+    )
+
+    assert "performance/log_loss" in result.metrics
+    assert result.metadata["score_labels"] == ["bronze", "gold"]
+
+
+def test_performance_report_adds_lift_when_enabled() -> None:
+    df = pd.DataFrame(
+        {
+            "actual": [1] * 5 + [0] * 15,
+            "prediction": [1] * 5 + [0] * 15,
+            "score": [
+                0.99,
+                0.95,
+                0.93,
+                0.91,
+                0.89,
+                0.7,
+                0.65,
+                0.6,
+                0.55,
+                0.5,
+                0.45,
+                0.4,
+                0.35,
+                0.3,
+                0.25,
+                0.2,
+                0.15,
+                0.1,
+                0.05,
+                0.01,
+            ],
+        }
+    )
+
+    result = performance_report(
+        df,
+        target="actual",
+        prediction="prediction",
+        prediction_score="score",
+        include_lift=True,
+        task_type="classification",
+    )
+
+    assert result.metrics["performance/lift/positive/top_decile"] == pytest.approx(4.0)
+    assert "lift" in result.summary
+
+
+def test_performance_report_requires_scores_for_lift() -> None:
+    df = pd.DataFrame({"actual": [0, 1], "prediction": [0, 1]})
+
+    with pytest.raises(LumosValidationError, match="requires classification prediction_score"):
+        performance_report(
+            df,
+            target="actual",
+            prediction="prediction",
+            include_lift=True,
+            task_type="classification",
+        )
