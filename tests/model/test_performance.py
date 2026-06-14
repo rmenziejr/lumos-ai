@@ -5,7 +5,7 @@ import pandas as pd
 import pytest
 
 import lumosai.mlflow as mlflow_adapter
-from lumosai.exceptions import LumosOptionalDependencyError
+from lumosai.exceptions import LumosOptionalDependencyError, LumosValidationError
 from lumosai.model.performance import performance_report
 from lumosai.results import LumosResult
 
@@ -133,3 +133,48 @@ def test_performance_report_to_dict_is_json_safe() -> None:
     )
 
     assert result.to_dict()["metrics"]["performance/mae"] > 0
+
+
+def test_performance_report_includes_report_name_and_schema_metadata() -> None:
+    frame = pd.DataFrame(
+        {
+            "actual": [0, 1, 1, 0],
+            "prediction": [0, 1, 1, 0],
+            "day_of_week": [1, 2, 3, 4],
+        }
+    )
+
+    result = performance_report(
+        frame,
+        target="actual",
+        prediction="prediction",
+        feature_columns=["day_of_week"],
+        categorical_columns=["day_of_week"],
+        report_name="Holdout Performance",
+        task_type="classification",
+    )
+
+    assert result.metadata["report_name"] == "Holdout Performance"
+    assert result.metadata["feature_columns"] == ["day_of_week"]
+    assert result.metadata["categorical_columns"] == ["day_of_week"]
+
+
+def test_performance_report_rejects_categorical_outside_features() -> None:
+    frame = pd.DataFrame(
+        {
+            "actual": [0, 1],
+            "prediction": [0, 1],
+            "feature": [1, 2],
+            "day_of_week": [1, 2],
+        }
+    )
+
+    with pytest.raises(LumosValidationError, match="categorical_columns"):
+        performance_report(
+            frame,
+            target="actual",
+            prediction="prediction",
+            feature_columns=["feature"],
+            categorical_columns=["day_of_week"],
+            task_type="classification",
+        )
