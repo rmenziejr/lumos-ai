@@ -3,6 +3,7 @@ from __future__ import annotations
 import pandas as pd
 import pytest
 
+from lumosai.exceptions import LumosValidationError
 from lumosai.model.bias import bias_report
 from lumosai.settings import MetricThreshold, settings
 
@@ -203,3 +204,52 @@ def test_bias_report_treats_regression_error_as_lower_is_better() -> None:
     ]
     assert flags
     assert all(flag["group"] == "b" for flag in flags)
+
+
+def test_bias_report_includes_report_name_and_schema_metadata() -> None:
+    frame = pd.DataFrame(
+        {
+            "actual": [1, 1, 0, 0],
+            "prediction": [1, 0, 0, 0],
+            "segment": ["a", "a", "b", "b"],
+            "day_of_week": [1, 2, 3, 4],
+        }
+    )
+
+    result = bias_report(
+        frame,
+        target="actual",
+        prediction="prediction",
+        protected_attribute=["segment"],
+        feature_columns=["day_of_week"],
+        categorical_columns=["day_of_week"],
+        report_name="Holdout Bias",
+        task_type="classification",
+    )
+
+    assert result.metadata["report_name"] == "Holdout Bias"
+    assert result.metadata["feature_columns"] == ["day_of_week"]
+    assert result.metadata["categorical_columns"] == ["day_of_week"]
+
+
+def test_bias_report_rejects_categorical_outside_features() -> None:
+    frame = pd.DataFrame(
+        {
+            "actual": [1, 0],
+            "prediction": [1, 0],
+            "segment": ["a", "b"],
+            "feature": [10, 20],
+            "day_of_week": [1, 2],
+        }
+    )
+
+    with pytest.raises(LumosValidationError, match="categorical_columns"):
+        bias_report(
+            frame,
+            target="actual",
+            prediction="prediction",
+            protected_attribute=["segment"],
+            feature_columns=["feature"],
+            categorical_columns=["day_of_week"],
+            task_type="classification",
+        )

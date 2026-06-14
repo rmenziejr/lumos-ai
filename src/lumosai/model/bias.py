@@ -12,6 +12,7 @@ from lumosai.mlflow import log_result
 from lumosai.model.metrics import TaskType, compare_metric, detect_task_type, get_metrics
 from lumosai.model.validation import validate_prediction_frame
 from lumosai.results import LumosResult
+from lumosai.schema import validate_categorical_columns
 from lumosai.settings import MetricThreshold, settings
 
 ProtectedAttribute = list[str] | dict[str, list[float] | None]
@@ -156,6 +157,9 @@ def bias_report(
     prediction_score: str | None = None,
     task_type: TaskType | None = None,
     custom_metrics: list[tuple[str, Callable[..., float]]] | None = None,
+    report_name: str | None = None,
+    feature_columns: list[str] | None = None,
+    categorical_columns: list[str] | None = None,
     experiment_name: str | None = None,
 ) -> LumosResult:
     current_pd = to_pandas(current)
@@ -164,6 +168,13 @@ def bias_report(
         target=target,
         prediction=prediction,
         prediction_score=prediction_score,
+    )
+    if feature_columns is not None:
+        require_columns(current_pd, feature_columns)
+    selected_categorical_columns = validate_categorical_columns(
+        current_pd,
+        categorical_columns=categorical_columns,
+        analysis_columns=feature_columns,
     )
     normalized = _normalize_protected_attribute(protected_attribute)
     require_columns(current_pd, normalized.keys())
@@ -250,11 +261,19 @@ def bias_report(
             "comparisons": comparisons,
         }
 
+    metadata: dict[str, Any] = {"report_type": "bias", "task_type": resolved_task}
+    if report_name is not None:
+        metadata["report_name"] = report_name
+    if feature_columns is not None:
+        metadata["feature_columns"] = list(feature_columns)
+    if selected_categorical_columns:
+        metadata["categorical_columns"] = selected_categorical_columns
+
     result = LumosResult(
         metrics={"bias/flags_count": float(len(flagged))},
         summary=summary,
         flagged=flagged,
-        metadata={"report_type": "bias", "task_type": resolved_task},
+        metadata=metadata,
     )
     log_result(result, experiment_name=experiment_name)
     return result
