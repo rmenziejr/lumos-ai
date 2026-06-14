@@ -64,3 +64,24 @@ def test_data_drift_share_threshold_must_be_share(monkeypatch: MonkeyPatch) -> N
 
     with pytest.raises(ValidationError):
         Settings()
+
+
+def test_data_sample_settings_defaults() -> None:
+    loaded = Settings()
+
+    assert loaded.data.default_sample_size == 10000
+    assert loaded.data.sample_artifact_format == "parquet"
+    assert loaded.data.log_sample_metadata is True
+    assert loaded.data.log_sample_artifacts is False
+
+
+def test_data_sample_settings_env_override(monkeypatch) -> None:
+    monkeypatch.setenv("LUMOSAI_DATA__DEFAULT_SAMPLE_SIZE", "2500")
+    monkeypatch.setenv("LUMOSAI_DATA__SAMPLE_ARTIFACT_FORMAT", "csv")
+    monkeypatch.setenv("LUMOSAI_DATA__LOG_SAMPLE_ARTIFACTS", "true")
+
+    loaded = Settings()
+
+    assert loaded.data.default_sample_size == 2500
+    assert loaded.data.sample_artifact_format == "csv"
+    assert loaded.data.log_sample_artifacts is True

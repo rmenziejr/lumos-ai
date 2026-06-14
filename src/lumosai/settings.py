@@ -26,6 +26,10 @@ class DataSettings(BaseModel):
     drift_share_threshold: float = Field(default=0.1, ge=0.0, le=1.0)
     profile_minimal_default: bool = True
     log_analysis: bool = True
+    default_sample_size: int = Field(default=10000, ge=1)
+    sample_artifact_format: Literal["parquet", "csv"] = "parquet"
+    log_sample_metadata: bool = True
+    log_sample_artifacts: bool = False
 
 
 class MetricThreshold(BaseModel):
