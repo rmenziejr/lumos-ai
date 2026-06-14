@@ -1,0 +1,60 @@
+[project]
+name = "lumosai"
+version = "0.1.0"
+description = "Opinionated ML monitoring and reporting helpers."
+readme = "README.md"
+requires-python = ">=3.11"
+dependencies = [
+  "evidently>=0.4.38",
+  "matplotlib>=3.8",
+  "narwhals>=1.0",
+  "pandas>=2.1",
+  "pydantic>=2.7",
+  "pydantic-settings>=2.2",
+  "scikit-learn>=1.4",
+  "ydata-profiling>=4.8",
+]
+
+[project.optional-dependencies]
+mlflow = ["mlflow>=2.18"]
+importance = ["shap>=0.45"]
+dev = [
+  "pytest>=8.2",
+  "pytest-cov>=5.0",
+  "ruff>=0.5",
+  "mypy>=1.10",
+  "polars>=1.0",
+]
+
+[build-system]
+requires = ["hatchling"]
+build-backend = "hatchling.build"
+
+[tool.hatch.build.targets.wheel]
+packages = ["src/lumosai"]
+
+[tool.pytest.ini_options]
+testpaths = ["tests"]
+markers = [
+  "integration: tests that exercise heavy optional integrations",
+  "mlflow: tests that require mlflow",
+]
+
+[tool.ruff]
+line-length = 100
+target-version = "py311"
+src = ["src", "tests"]
+
+[tool.ruff.lint]
+select = ["E", "F", "I", "B", "UP", "N", "ANN", "S"]
+ignore = ["ANN401", "S101"]
+
+[tool.ruff.lint.per-file-ignores]
+"tests/**/*.py" = ["ANN"]
+
+[tool.mypy]
+python_version = "3.11"
+packages = ["lumosai"]
+strict = true
+warn_unused_ignores = true
+warn_return_any = true
