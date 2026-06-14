@@ -4,7 +4,7 @@ from collections.abc import Callable
 from typing import Any, Literal
 
 import numpy as np
-from sklearn.inspection import permutation_importance
+from sklearn.inspection import permutation_importance  # type: ignore[import-untyped]
 
 from lumosai.data.ingest import to_pandas
 from lumosai.data.validation import require_columns
@@ -15,7 +15,7 @@ from lumosai.results import LumosResult
 
 def _require_shap() -> Any:
     try:
-        import shap
+        import shap  # type: ignore[import-not-found]
     except ImportError as exc:
         msg = (
             "SHAP feature importance requires the optional dependency: "
@@ -52,7 +52,7 @@ def _shap_feature_importance(
     abs_values = np.abs(raw_values)
     values_by_feature = np.moveaxis(abs_values, feature_axis, 0).reshape(feature_count, -1)
     mean_values = values_by_feature.mean(axis=1)
-    rows = [
+    rows: list[dict[str, Any]] = [
         {
             "feature": feature,
             "importance_mean": float(mean),
@@ -60,7 +60,7 @@ def _shap_feature_importance(
         }
         for feature, mean in zip(feature_columns, mean_values, strict=True)
     ]
-    rows.sort(key=lambda row: row["importance_mean"], reverse=True)
+    rows.sort(key=lambda row: float(row["importance_mean"]), reverse=True)
     return rows
 
 

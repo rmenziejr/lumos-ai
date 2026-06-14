@@ -7,6 +7,7 @@ import json
 from pathlib import Path
 from typing import Any, Literal
 
+import numpy as np
 import pandas as pd
 
 from lumosai.data.ingest import to_pandas
@@ -215,7 +216,7 @@ def _digest_frame(frame: pd.DataFrame) -> str:
     stable_frame = frame.apply(
         lambda column: column.map(lambda value: json.dumps(value, sort_keys=True, default=str))
     )
-    hashed = pd.util.hash_pandas_object(stable_frame, index=False).values
+    hashed = np.asarray(pd.util.hash_pandas_object(stable_frame, index=False), dtype="uint64")
     return hashlib.sha256(hashed.tobytes()).hexdigest()
 
 
