@@ -2,6 +2,9 @@
 
 from typing import Any
 
+from lumosai.results import LumosResult
+from lumosai.settings import settings
+
 __all__ = [
     "LumosResult",
     "bias_report",
@@ -14,14 +17,6 @@ __all__ = [
 
 
 def __getattr__(name: str) -> Any:
-    if name == "LumosResult":
-        from lumosai.results import LumosResult
-
-        return LumosResult
-    if name == "settings":
-        from lumosai.settings import settings
-
-        return settings
     if name in {"drift_report", "profile"}:
         from lumosai import data
 

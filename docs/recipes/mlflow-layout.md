@@ -2,6 +2,9 @@
 
 Use one experiment per monitored model or model family.
 Each scheduled monitoring execution can create one run.
+Install `lumosai[mlflow]` to enable MLflow logging.
+When no MLflow run is active, each `lumosai` call with `experiment_name` creates its own run.
+Start an MLflow run around grouped calls when one scheduled execution should produce one run.
 
 Metric namespaces:
 

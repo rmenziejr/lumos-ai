@@ -2,6 +2,7 @@
 
 Run `profile()` after feature table creation to inspect the produced dataset.
 Run `drift_report()` against a stable benchmark when a new feature table or production extract is available.
+Install `lumosai[mlflow]` before passing `experiment_name`; omit `experiment_name` for local-only results.
 
 ```python
 from lumosai.data import drift_report, profile
