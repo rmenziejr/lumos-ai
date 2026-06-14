@@ -1,10 +1,16 @@
 from __future__ import annotations
 
+from contextlib import nullcontext
+from typing import Any
+
 import pandas as pd
 import pytest
 
+import lumosai.bundles as bundles
 from lumosai.bundles import monitoring_report
 from lumosai.exceptions import LumosValidationError
+from lumosai.results import LumosResult
+from lumosai.settings import Settings, settings
 
 
 def make_monitoring_frame() -> pd.DataFrame:
@@ -54,6 +60,16 @@ def test_monitoring_report_requires_protected_attribute_when_bias_enabled() -> N
         )
 
 
+def test_monitoring_report_rejects_temporal_features_in_feature_columns() -> None:
+    with pytest.raises(LumosValidationError, match="temporal_features"):
+        monitoring_report(
+            make_monitoring_frame(),
+            benchmark=make_monitoring_frame(),
+            temporal_features=["event_date"],
+            feature_columns=["event_date", "amount"],
+        )
+
+
 def test_monitoring_report_runs_sample_drift_and_performance() -> None:
     result = monitoring_report(
         make_monitoring_frame(),
@@ -91,6 +107,40 @@ def test_monitoring_report_runs_previous_window_drift_when_provided() -> None:
     assert result.results["drift_previous_window"].metadata["comparison"] == "previous_window"
 
 
+def test_monitoring_report_honors_previous_window_drift_setting() -> None:
+    loaded = Settings()
+    loaded.bundles.include_previous_window_drift = False
+
+    result = monitoring_report(
+        make_monitoring_frame(),
+        benchmark=make_monitoring_frame(),
+        previous_window=make_monitoring_frame(),
+        temporal_features=["event_date"],
+        feature_columns=["amount", "age"],
+        loaded_settings=loaded,
+    )
+
+    assert "drift_previous_window" not in result.results
+    assert (
+        result.metadata["skipped_reports"]["drift_previous_window"]
+        == "previous_window drift disabled by settings"
+    )
+
+
+def test_monitoring_report_rejects_disabled_fail_fast_setting() -> None:
+    loaded = Settings()
+    loaded.bundles.fail_fast = False
+
+    with pytest.raises(LumosValidationError, match="fail_fast"):
+        monitoring_report(
+            make_monitoring_frame(),
+            benchmark=make_monitoring_frame(),
+            temporal_features=["event_date"],
+            feature_columns=["amount", "age"],
+            loaded_settings=loaded,
+        )
+
+
 def test_monitoring_report_runs_bias_when_protected_attribute_provided() -> None:
     result = monitoring_report(
         make_monitoring_frame(),
@@ -104,3 +154,42 @@ def test_monitoring_report_runs_bias_when_protected_attribute_provided() -> None
 
     assert "bias" in result.results
     assert result.results["bias"].metadata["report_type"] == "bias"
+
+
+def test_monitoring_report_suppresses_child_result_dict_logging(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    loaded = Settings()
+    loaded.mlflow.default_experiment_name = "monitoring"
+    monkeypatch.setattr(settings.mlflow, "log_dicts", True)
+    child_log_dict_settings: list[bool] = []
+    final_log_dict_settings: list[bool] = []
+
+    def fake_child_report(*_args: Any, **_kwargs: Any) -> LumosResult:
+        child_log_dict_settings.append(settings.mlflow.log_dicts)
+        return LumosResult(metrics={"child/metric": 1.0})
+
+    def fake_log_run(run: Any, **_kwargs: Any) -> Any:
+        final_log_dict_settings.append(settings.mlflow.log_dicts)
+        return run
+
+    monkeypatch.setattr(
+        bundles,
+        "mlflow_run",
+        lambda *_args, **_kwargs: nullcontext((object(), "run-1")),
+    )
+    monkeypatch.setattr(bundles, "build_sample", fake_child_report)
+    monkeypatch.setattr(bundles, "drift_report", fake_child_report)
+    monkeypatch.setattr(bundles, "log_run", fake_log_run)
+
+    monitoring_report(
+        make_monitoring_frame(),
+        benchmark=make_monitoring_frame(),
+        temporal_features=["event_date"],
+        feature_columns=["amount", "age"],
+        loaded_settings=loaded,
+    )
+
+    assert child_log_dict_settings == [False, False]
+    assert final_log_dict_settings == [True]
+    assert settings.mlflow.log_dicts is True
