@@ -10,6 +10,7 @@ __all__ = [
     "LumosRun",
     "bias_report",
     "build_sample",
+    "calibration_report",
     "drift_report",
     "feature_importance",
     "get_metrics",
@@ -25,7 +26,13 @@ def __getattr__(name: str) -> Any:
         from lumosai import data
 
         return getattr(data, name)
-    if name in {"bias_report", "feature_importance", "get_metrics", "performance_report"}:
+    if name in {
+        "bias_report",
+        "calibration_report",
+        "feature_importance",
+        "get_metrics",
+        "performance_report",
+    }:
         from lumosai import model
 
         return getattr(model, name)
