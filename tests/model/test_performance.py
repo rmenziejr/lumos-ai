@@ -2,7 +2,9 @@ from __future__ import annotations
 
 import numpy as np
 import pandas as pd
+import pytest
 
+from lumosai.exceptions import LumosOptionalDependencyError
 from lumosai.model.performance import performance_report
 from lumosai.results import LumosResult
 
@@ -105,18 +107,17 @@ def test_performance_report_uses_empty_string_score_column_name() -> None:
     assert result.metrics["performance/roc_auc"] == 1.0
 
 
-def test_performance_report_marks_no_mlflow_logging_for_placeholder() -> None:
+def test_performance_report_requires_mlflow_when_logging_requested() -> None:
     frame = pd.DataFrame({"actual": [1.0, 2.0, 3.0], "prediction": [1.0, 2.5, 2.5]})
 
-    result = performance_report(
-        frame,
-        target="actual",
-        prediction="prediction",
-        task_type="regression",
-        experiment_name="requested",
-    )
-
-    assert result.metadata["logged_to_mlflow"] is False
+    with pytest.raises(LumosOptionalDependencyError):
+        performance_report(
+            frame,
+            target="actual",
+            prediction="prediction",
+            task_type="regression",
+            experiment_name="requested",
+        )
 
 
 def test_performance_report_to_dict_is_json_safe() -> None:
