@@ -67,6 +67,67 @@ def test_get_metrics_multiclass_classification_uses_probability_matrix_for_roc_a
     assert metrics["roc_auc"] == pytest.approx(1.0)
 
 
+def test_get_metrics_multiclass_roc_auc_without_score_labels_uses_sorted_score_order() -> None:
+    metrics = get_metrics(
+        y_true=[2, 0, 1, 2, 1, 0],
+        y_pred=[2, 0, 1, 2, 1, 0],
+        y_score=[
+            [0.05, 0.05, 0.9],
+            [0.9, 0.05, 0.05],
+            [0.05, 0.9, 0.05],
+            [0.1, 0.1, 0.8],
+            [0.1, 0.8, 0.1],
+            [0.8, 0.1, 0.1],
+        ],
+        task_type="classification",
+    )
+
+    assert metrics["roc_auc"] == pytest.approx(1.0)
+
+
+def test_get_metrics_binary_roc_auc_uses_reversed_score_labels_for_2d_scores() -> None:
+    y_true = pd.Series(["no", "yes", "yes", "no"])
+    y_score = np.array([[0.1, 0.9], [0.9, 0.1], [0.8, 0.2], [0.2, 0.8]])
+
+    metrics = get_metrics(
+        y_true,
+        y_pred=pd.Series(["no", "yes", "yes", "no"]),
+        y_score=y_score,
+        score_labels=["yes", "no"],
+        task_type="classification",
+    )
+
+    assert metrics["roc_auc"] == pytest.approx(1.0)
+    assert metrics["log_loss"] == pytest.approx(
+        log_loss(y_true, y_score[:, [1, 0]], labels=["no", "yes"])
+    )
+
+
+def test_get_metrics_skips_log_loss_for_1d_decision_scores_outside_probability_range() -> None:
+    metrics = get_metrics(
+        y_true=[0, 1, 1, 0],
+        y_pred=[0, 1, 1, 0],
+        y_score=[-2.0, 3.0, 2.0, -1.0],
+        task_type="classification",
+    )
+
+    assert metrics["roc_auc"] == pytest.approx(1.0)
+    assert "log_loss" not in metrics
+
+
+def test_get_metrics_mixed_explicit_score_labels_do_not_raise_raw_type_error() -> None:
+    metrics = get_metrics(
+        y_true=[0, 1, 1, 0],
+        y_pred=[0, 1, 1, 0],
+        y_score=np.array([[0.9, 0.1], [0.1, 0.9], [0.2, 0.8], [0.8, 0.2]]),
+        score_labels=[0, "one"],
+        task_type="classification",
+    )
+
+    assert metrics["roc_auc"] == pytest.approx(1.0)
+    assert "log_loss" not in metrics
+
+
 def test_get_metrics_adds_log_loss_for_binary_probability_matrix() -> None:
     y_true = pd.Series([0, 1, 1, 0])
     y_pred = pd.Series([0, 1, 0, 0])

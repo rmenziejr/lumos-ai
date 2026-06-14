@@ -62,7 +62,9 @@ def get_metrics(
         )
         if y_score is not None:
             metrics["roc_auc"] = _roc_auc(y_true, y_score, score_labels)
-            metrics["log_loss"] = _log_loss(y_true, y_score, score_labels)
+            log_loss_value = _log_loss(y_true, y_score, score_labels)
+            if log_loss_value is not None:
+                metrics["log_loss"] = log_loss_value
     else:
         metrics["mae"] = float(mean_absolute_error(y_true, y_pred))
         metrics["rmse"] = float(root_mean_squared_error(y_true, y_pred))
@@ -79,20 +81,25 @@ def _roc_auc(
     y_score: Sequence[Any] | pd.Series,
     score_labels: Sequence[Any] | None = None,
 ) -> float:
-    labels = (
-        list(score_labels)
-        if score_labels is not None
-        else pd.Series(y_true).dropna().unique().tolist()
-    )
+    labels = list(score_labels) if score_labels is not None else _unique_true_labels(y_true)
     score_array = np.asarray(y_score)
     if len(labels) <= 2:
         if score_array.ndim == 2:
             if score_array.shape[1] != 2:
                 msg = "binary y_score must be one-dimensional or have two probability columns"
                 raise ValueError(msg)
-            score_array = score_array[:, 1]
+            score_array = _binary_roc_auc_scores(score_array, score_labels)
         return float(roc_auc_score(y_true, score_array))
-    ordered_labels, ordered_scores = _scores_in_sklearn_label_order(score_array, labels)
+    if score_labels is None:
+        return float(
+            roc_auc_score(
+                y_true,
+                score_array,
+                multi_class="ovr",
+                average="weighted",
+            )
+        )
+    ordered_labels, ordered_scores, _ = _scores_in_sklearn_label_order(score_array, labels)
     return float(
         roc_auc_score(
             y_true,
@@ -108,24 +115,78 @@ def _log_loss(
     y_true: Sequence[Any] | pd.Series,
     y_score: Sequence[Any] | pd.Series,
     score_labels: Sequence[Any] | None,
-) -> float:
-    score_array = np.asarray(y_score)
+) -> float | None:
+    score_array = _probability_score_array(y_score)
+    if score_array is None:
+        return None
     labels = list(score_labels) if score_labels is not None else None
+    labels_are_sortable = True
     if labels is not None and score_array.ndim == 2:
-        labels, score_array = _scores_in_sklearn_label_order(score_array, labels)
-    return float(log_loss(y_true, score_array, labels=labels))
+        labels, score_array, labels_are_sortable = _scores_in_sklearn_label_order(
+            score_array, labels
+        )
+    try:
+        return float(log_loss(y_true, score_array, labels=labels))
+    except (TypeError, ValueError):
+        if labels_are_sortable:
+            raise
+        return None
+
+
+def _unique_true_labels(y_true: Sequence[Any] | pd.Series) -> list[Any]:
+    return pd.Series(y_true).dropna().unique().tolist()
+
+
+def _binary_roc_auc_scores(
+    score_array: np.ndarray,
+    score_labels: Sequence[Any] | None,
+) -> np.ndarray:
+    if score_labels is None:
+        return score_array[:, 1]
+    labels = list(score_labels)
+    if len(labels) != 2:
+        return score_array[:, 1]
+    ordered_labels, labels_are_sortable = _sklearn_label_order(labels)
+    positive_label = ordered_labels[-1] if labels_are_sortable else labels[-1]
+    return score_array[:, labels.index(positive_label)]
+
+
+def _probability_score_array(y_score: Sequence[Any] | pd.Series) -> np.ndarray | None:
+    try:
+        score_array = np.asarray(y_score, dtype=float)
+    except (TypeError, ValueError):
+        return None
+
+    if not np.all(np.isfinite(score_array)):
+        return None
+    if not np.all((0 <= score_array) & (score_array <= 1)):
+        return None
+    if score_array.ndim == 1:
+        return score_array
+    if score_array.ndim == 2 and np.allclose(score_array.sum(axis=1), 1.0):
+        return score_array
+    return None
 
 
 def _scores_in_sklearn_label_order(
     score_array: np.ndarray,
     labels: Sequence[Any],
-) -> tuple[list[Any], np.ndarray]:
+) -> tuple[list[Any], np.ndarray, bool]:
     original_labels = list(labels)
-    ordered_labels = sorted(original_labels)
+    ordered_labels, labels_are_sortable = _sklearn_label_order(original_labels)
+    if not labels_are_sortable:
+        return original_labels, score_array, False
     if original_labels == ordered_labels:
-        return ordered_labels, score_array
+        return ordered_labels, score_array, True
     column_order = [original_labels.index(label) for label in ordered_labels]
-    return ordered_labels, score_array[:, column_order]
+    return ordered_labels, score_array[:, column_order], True
+
+
+def _sklearn_label_order(labels: Sequence[Any]) -> tuple[list[Any], bool]:
+    try:
+        return sorted(labels), True
+    except TypeError:
+        return list(labels), False
 
 
 def compare_metric(
