@@ -267,8 +267,10 @@ performance_report(
     target,
     prediction,
     prediction_score=None,
+    score_labels=None,
     task_type=None,
     custom_metrics=None,
+    include_lift=None,
     report_name=None,
     feature_columns=None,
     categorical_columns=None,
@@ -280,9 +282,41 @@ Computes current-window model performance.
 
 - `target` is the outcome column.
 - `prediction` is the predicted label or value column.
-- `prediction_score` is an optional score/probability column.
+- `prediction_score` is an optional score/probability column, a column of probability arrays, or a mapping of labels to probability columns.
+- `score_labels` defines probability order for binary or multiclass arrays. Pass `list(model.classes_)` for sklearn-style classifiers.
+- When multiclass array scores omit `score_labels`, labels are inferred by sorting observed target/prediction labels and warning metadata is recorded.
+- Classification reports include log loss when probability-like scores are supplied.
+- Pass `include_lift=True` to add decile lift metrics under `performance/lift/<class>/...`.
 - Returns namespaced metrics under `performance/...`.
 - Stores `feature_columns` and `categorical_columns` in metadata when provided.
+
+### `calibration_report(...)`
+
+```python
+calibration_report(
+    current,
+    target,
+    prediction_score,
+    *,
+    score_labels=None,
+    n_bins=10,
+    strategy="uniform",
+    report_name=None,
+    experiment_name=None,
+)
+```
+
+Computes probability calibration for classification models.
+
+- Accepts sklearn-style probability arrays through a `prediction_score` column.
+- Also accepts `prediction_score={"label": "probability_column"}` mappings.
+- `score_labels` defines probability order. Pass `list(model.classes_)` for sklearn-style classifiers.
+- Binary calibration evaluates the positive class.
+- Multiclass calibration runs one-vs-rest calibration per class.
+- Returns Brier score and expected calibration error metrics under `calibration/<class>/...`.
+- Returns macro calibration metrics under `calibration/macro_brier` and `calibration/macro_ece`.
+- Stores bin tables in `result.summary["calibration"]`.
+- Uses `report_name` in result metadata and MLflow logging when provided.
 
 ### `bias_report(...)`
 

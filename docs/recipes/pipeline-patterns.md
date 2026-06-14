@@ -38,7 +38,7 @@ Use training jobs to create a benchmark sample, evaluate holdout performance, ch
 
 ```python
 from lumosai.data import build_sample
-from lumosai.model import bias_report, feature_importance, performance_report
+from lumosai.model import bias_report, calibration_report, feature_importance, performance_report
 
 train_sample = build_sample(
     training_frame,
@@ -59,16 +59,31 @@ holdout_sample = build_sample(
     experiment_name="model-training",
 )
 
+# Keep probability columns available for score-aware reports.
+holdout_report_frame = validation_scored
+
 performance_report(
-    holdout_sample.artifacts["sample"],
+    holdout_report_frame,
     target="actual",
     prediction="prediction",
+    prediction_score="prediction_score",
+    score_labels=list(model.classes_),
+    include_lift=True,
     feature_columns=feature_columns,
     experiment_name="model-training",
 )
 
+calibration_report(
+    holdout_report_frame,
+    target="actual",
+    prediction_score="prediction_score",
+    score_labels=list(model.classes_),
+    report_name="Holdout Calibration",
+    experiment_name="model-training",
+)
+
 bias_report(
-    holdout_sample.artifacts["sample"],
+    holdout_report_frame,
     target="actual",
     prediction="prediction",
     protected_attribute=["region", "segment"],
@@ -84,6 +99,8 @@ feature_importance(
     experiment_name="model-training",
 )
 ```
+
+Use calibration in training or evaluation jobs where labels and probabilities are available. Monitoring can trend calibration later when late-arriving labels are joined back to scored windows.
 
 ## Ongoing Monitoring Pipeline
 
