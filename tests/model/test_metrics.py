@@ -103,6 +103,27 @@ def test_get_metrics_binary_roc_auc_uses_reversed_score_labels_for_2d_scores() -
     )
 
 
+def test_get_metrics_binary_roc_auc_uses_score_labels_for_1d_scores() -> None:
+    y_true = pd.Series(["no", "yes", "yes", "no"])
+
+    metrics = get_metrics(
+        y_true,
+        y_pred=pd.Series(["no", "yes", "yes", "no"]),
+        y_score=[0.9, 0.1, 0.2, 0.8],
+        score_labels=["yes", "no"],
+        task_type="classification",
+    )
+
+    assert metrics["roc_auc"] == pytest.approx(1.0)
+    assert metrics["log_loss"] == pytest.approx(
+        log_loss(
+            y_true,
+            np.array([[0.9, 0.1], [0.1, 0.9], [0.2, 0.8], [0.8, 0.2]]),
+            labels=["no", "yes"],
+        )
+    )
+
+
 def test_get_metrics_skips_log_loss_for_1d_decision_scores_outside_probability_range() -> None:
     metrics = get_metrics(
         y_true=[0, 1, 1, 0],

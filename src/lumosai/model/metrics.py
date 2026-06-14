@@ -89,6 +89,8 @@ def _roc_auc(
                 msg = "binary y_score must be one-dimensional or have two probability columns"
                 raise ValueError(msg)
             score_array = _binary_roc_auc_scores(score_array, score_labels)
+        elif score_array.ndim == 1:
+            score_array = _binary_roc_auc_1d_scores(score_array, labels, score_labels)
         return float(roc_auc_score(y_true, score_array))
     if score_labels is None:
         return float(
@@ -121,6 +123,10 @@ def _log_loss(
         return None
     labels = list(score_labels) if score_labels is not None else None
     labels_are_sortable = True
+    if labels is not None and score_array.ndim == 1 and len(labels) == 2:
+        labels, score_array, labels_are_sortable = _binary_1d_scores_in_sklearn_label_order(
+            score_array, labels
+        )
     if labels is not None and score_array.ndim == 2:
         labels, score_array, labels_are_sortable = _scores_in_sklearn_label_order(
             score_array, labels
@@ -149,6 +155,24 @@ def _binary_roc_auc_scores(
     ordered_labels, labels_are_sortable = _sklearn_label_order(labels)
     positive_label = ordered_labels[-1] if labels_are_sortable else labels[-1]
     return score_array[:, labels.index(positive_label)]
+
+
+def _binary_roc_auc_1d_scores(
+    score_array: np.ndarray,
+    labels: Sequence[Any],
+    score_labels: Sequence[Any] | None,
+) -> np.ndarray:
+    if score_labels is None:
+        return score_array
+    score_label_list = list(score_labels)
+    if len(score_label_list) != 2:
+        return score_array
+    ordered_labels, labels_are_sortable = _sklearn_label_order(labels)
+    sklearn_positive_label = ordered_labels[-1] if labels_are_sortable else score_label_list[-1]
+    score_positive_label = score_label_list[-1]
+    if sklearn_positive_label == score_positive_label:
+        return score_array
+    return 1 - score_array
 
 
 def _probability_score_array(y_score: Sequence[Any] | pd.Series) -> np.ndarray | None:
@@ -180,6 +204,24 @@ def _scores_in_sklearn_label_order(
         return ordered_labels, score_array, True
     column_order = [original_labels.index(label) for label in ordered_labels]
     return ordered_labels, score_array[:, column_order], True
+
+
+def _binary_1d_scores_in_sklearn_label_order(
+    score_array: np.ndarray,
+    labels: Sequence[Any],
+) -> tuple[list[Any], np.ndarray, bool]:
+    original_labels = list(labels)
+    ordered_labels, labels_are_sortable = _sklearn_label_order(original_labels)
+    if not labels_are_sortable:
+        return original_labels, score_array, False
+    score_positive_label = original_labels[-1]
+    probabilities = np.column_stack(
+        [
+            score_array if label == score_positive_label else 1 - score_array
+            for label in ordered_labels
+        ]
+    )
+    return ordered_labels, probabilities, True
 
 
 def _sklearn_label_order(labels: Sequence[Any]) -> tuple[list[Any], bool]:

@@ -250,13 +250,21 @@ Fail-fast validation runs before report generation. The bundle validates require
 ### `get_metrics(...)`
 
 ```python
-get_metrics(y_true, y_pred, y_score=None, task_type=None, custom_metrics=None)
+get_metrics(
+    y_true,
+    y_pred,
+    y_score=None,
+    score_labels=None,
+    task_type=None,
+    custom_metrics=None,
+)
 ```
 
 Computes classification or regression metrics.
 
 - Auto-detects task type when not provided.
-- Supports classification metrics such as accuracy, precision, recall, F1, and ROC AUC when scores are supplied.
+- Supports classification metrics such as accuracy, precision, recall, F1, ROC AUC, and log loss when probability-like scores are supplied.
+- `score_labels` defines probability order for binary or multiclass scores. For 1D binary scores, the score is interpreted as the probability of `score_labels[-1]`.
 - Supports regression metrics such as MAE, RMSE, and R2.
 
 ### `performance_report(...)`
