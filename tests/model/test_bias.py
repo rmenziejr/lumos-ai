@@ -116,9 +116,7 @@ def test_bias_report_keeps_out_of_bin_and_missing_groups() -> None:
         task_type="classification",
     )
 
-    groups = {
-        row["group"] for row in result.summary["by_attribute"]["age"]["by_group"]
-    }
+    groups = {row["group"] for row in result.summary["by_attribute"]["age"]["by_group"]}
     assert "__out_of_bin__" in groups
     assert "__missing__" in groups
 

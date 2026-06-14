@@ -207,12 +207,7 @@ def bias_report(
 
         comparisons: list[dict[str, Any]] = []
         metric_names = sorted(
-            {
-                key
-                for row in by_group
-                for key in row
-                if key not in {"group", "count"}
-            }
+            {key for row in by_group for key in row if key not in {"group", "count"}}
         )
         for metric_name in metric_names:
             if metric_name == "mean_residual":

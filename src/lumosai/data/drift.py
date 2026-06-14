@@ -163,9 +163,7 @@ def drift_report(
     safe_comparison = safe_comparison_name(comparison)
     metrics = {
         f"drift/{safe_comparison}/n_drifted_columns": float(summary["n_drifted_columns"]),
-        f"drift/{safe_comparison}/share_drifted_columns": float(
-            summary["share_drifted_columns"]
-        ),
+        f"drift/{safe_comparison}/share_drifted_columns": float(summary["share_drifted_columns"]),
     }
     flagged: list[dict[str, Any]] = []
     if summary["share_drifted_columns"] > settings.data.drift_share_threshold:

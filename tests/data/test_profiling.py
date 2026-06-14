@@ -15,9 +15,7 @@ from lumosai.settings import settings
 def test_temporal_sample_includes_each_period() -> None:
     frame = pd.DataFrame(
         {
-            "event_date": pd.to_datetime(
-                ["2026-01-01", "2026-01-02", "2026-02-01", "2026-03-01"]
-            ),
+            "event_date": pd.to_datetime(["2026-01-01", "2026-01-02", "2026-02-01", "2026-03-01"]),
             "value": [1, 2, 3, 4],
         }
     )
@@ -30,9 +28,7 @@ def test_temporal_sample_includes_each_period() -> None:
 def test_temporal_sample_uses_min_per_period() -> None:
     frame = pd.DataFrame(
         {
-            "event_date": pd.to_datetime(
-                ["2026-01-01", "2026-01-02", "2026-02-01", "2026-02-02"]
-            ),
+            "event_date": pd.to_datetime(["2026-01-01", "2026-01-02", "2026-02-01", "2026-02-02"]),
             "value": [1, 2, 3, 4],
         }
     )
@@ -116,9 +112,7 @@ def test_profile_uses_temporal_sampling(
 ) -> None:
     frame = pd.DataFrame(
         {
-            "event_date": pd.to_datetime(
-                ["2026-01-01", "2026-01-02", "2026-02-01", "2026-02-02"]
-            ),
+            "event_date": pd.to_datetime(["2026-01-01", "2026-01-02", "2026-02-01", "2026-02-02"]),
             "value": [1, 2, 3, 4],
         }
     )
