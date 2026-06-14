@@ -3,6 +3,7 @@ from __future__ import annotations
 from collections.abc import Callable
 from typing import Any, Literal
 
+import numpy as np
 from sklearn.inspection import permutation_importance
 
 from lumosai.data.ingest import to_pandas
@@ -12,15 +13,55 @@ from lumosai.mlflow import log_result
 from lumosai.results import LumosResult
 
 
-def _shap_feature_importance() -> LumosResult:
+def _require_shap() -> Any:
     try:
-        import shap  # noqa: F401
+        import shap
     except ImportError as exc:
-        msg = "SHAP feature importance requires the 'importance' extra."
+        msg = (
+            "SHAP feature importance requires the optional dependency: "
+            "pip install lumosai[importance]"
+        )
         raise LumosOptionalDependencyError(msg) from exc
 
-    msg = "SHAP feature importance is not implemented yet; use method='permutation'."
-    raise LumosOptionalDependencyError(msg)
+    return shap
+
+
+def _shap_feature_importance(
+    model: Any,
+    frame_used: Any,
+    feature_columns: list[str],
+) -> list[dict[str, Any]]:
+    shap = _require_shap()
+    features = frame_used[feature_columns]
+    explainer = shap.Explainer(model, features)
+    values = explainer(features)
+    raw_values = np.asarray(values.values)
+    feature_count = len(feature_columns)
+
+    if raw_values.ndim < 2:
+        msg = "SHAP values must include a feature dimension"
+        raise LumosValidationError(msg)
+    if raw_values.shape[1] == feature_count:
+        feature_axis = 1
+    elif raw_values.shape[-1] == feature_count:
+        feature_axis = raw_values.ndim - 1
+    else:
+        msg = "SHAP values do not match feature_columns"
+        raise LumosValidationError(msg)
+
+    abs_values = np.abs(raw_values)
+    values_by_feature = np.moveaxis(abs_values, feature_axis, 0).reshape(feature_count, -1)
+    mean_values = values_by_feature.mean(axis=1)
+    rows = [
+        {
+            "feature": feature,
+            "importance_mean": float(mean),
+            "importance_std": 0.0,
+        }
+        for feature, mean in zip(feature_columns, mean_values, strict=True)
+    ]
+    rows.sort(key=lambda row: row["importance_mean"], reverse=True)
+    return rows
 
 
 def feature_importance(
@@ -38,6 +79,9 @@ def feature_importance(
     experiment_name: str | None = None,
 ) -> LumosResult:
     frame = to_pandas(data)
+    if not feature_columns:
+        msg = "feature_columns must contain at least one feature"
+        raise LumosValidationError(msg)
     require_columns(frame, [target, *feature_columns])
     if n_repeats < 1:
         msg = "n_repeats must be at least 1"
@@ -54,30 +98,30 @@ def feature_importance(
         frame_used = frame.sample(n=sample_size, random_state=random_state)
 
     if method == "shap":
-        return _shap_feature_importance()
-
-    importance = permutation_importance(
-        model,
-        frame_used[feature_columns],
-        frame_used[target],
-        scoring=scoring,
-        n_repeats=n_repeats,
-        random_state=random_state,
-    )
-    rows = [
-        {
-            "feature": feature,
-            "importance_mean": float(mean),
-            "importance_std": float(std),
-        }
-        for feature, mean, std in zip(
-            feature_columns,
-            importance.importances_mean,
-            importance.importances_std,
-            strict=True,
+        rows = _shap_feature_importance(model, frame_used, feature_columns)
+    else:
+        importance = permutation_importance(
+            model,
+            frame_used[feature_columns],
+            frame_used[target],
+            scoring=scoring,
+            n_repeats=n_repeats,
+            random_state=random_state,
         )
-    ]
-    rows.sort(key=lambda row: row["importance_mean"], reverse=True)
+        rows = [
+            {
+                "feature": feature,
+                "importance_mean": float(mean),
+                "importance_std": float(std),
+            }
+            for feature, mean, std in zip(
+                feature_columns,
+                importance.importances_mean,
+                importance.importances_std,
+                strict=True,
+            )
+        ]
+        rows.sort(key=lambda row: row["importance_mean"], reverse=True)
 
     metadata: dict[str, Any] = {
         "report_type": "feature_importance",

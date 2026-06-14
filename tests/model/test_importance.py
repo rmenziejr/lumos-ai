@@ -79,6 +79,22 @@ def test_feature_importance_validates_columns() -> None:
         )
 
 
+def test_feature_importance_rejects_empty_feature_columns() -> None:
+    frame = make_frame()
+    model = RandomForestClassifier(n_estimators=20, random_state=42).fit(
+        frame[["signal", "noise"]],
+        frame["target"],
+    )
+
+    with pytest.raises(LumosValidationError, match="feature_columns"):
+        feature_importance(
+            model,
+            frame,
+            target="target",
+            feature_columns=[],
+        )
+
+
 @pytest.mark.parametrize(
     ("kwargs", "match"),
     [
