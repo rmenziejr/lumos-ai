@@ -1,7 +1,21 @@
 """Model monitoring helpers."""
 
-from lumosai.model.bias import bias_report
-from lumosai.model.metrics import get_metrics
-from lumosai.model.performance import performance_report
+from typing import Any
 
 __all__ = ["bias_report", "get_metrics", "performance_report"]
+
+
+def __getattr__(name: str) -> Any:
+    if name == "bias_report":
+        from lumosai.model.bias import bias_report
+
+        return bias_report
+    if name == "get_metrics":
+        from lumosai.model.metrics import get_metrics
+
+        return get_metrics
+    if name == "performance_report":
+        from lumosai.model.performance import performance_report
+
+        return performance_report
+    raise AttributeError(f"module 'lumosai.model' has no attribute {name!r}")

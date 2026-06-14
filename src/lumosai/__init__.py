@@ -1,9 +1,6 @@
 """Public API for lumosai."""
 
-from lumosai.data import drift_report, profile
-from lumosai.model import bias_report, get_metrics, performance_report
-from lumosai.results import LumosResult
-from lumosai.settings import settings
+from typing import Any
 
 __all__ = [
     "LumosResult",
@@ -14,3 +11,23 @@ __all__ = [
     "profile",
     "settings",
 ]
+
+
+def __getattr__(name: str) -> Any:
+    if name == "LumosResult":
+        from lumosai.results import LumosResult
+
+        return LumosResult
+    if name == "settings":
+        from lumosai.settings import settings
+
+        return settings
+    if name in {"drift_report", "profile"}:
+        from lumosai import data
+
+        return getattr(data, name)
+    if name in {"bias_report", "get_metrics", "performance_report"}:
+        from lumosai import model
+
+        return getattr(model, name)
+    raise AttributeError(f"module 'lumosai' has no attribute {name!r}")
