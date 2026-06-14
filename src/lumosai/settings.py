@@ -1,9 +1,9 @@
 from __future__ import annotations
 
 from pathlib import Path
-from typing import Literal
+from typing import Any, Literal
 
-from pydantic import BaseModel, Field
+from pydantic import BaseModel, Field, model_validator
 from pydantic_settings import BaseSettings, SettingsConfigDict
 
 
@@ -34,29 +34,54 @@ class MetricThreshold(BaseModel):
     greater_is_better: bool = True
 
 
+def default_metric_thresholds() -> dict[str, MetricThreshold]:
+    return {
+        "precision": MetricThreshold(mode="relative", value=0.8, greater_is_better=True),
+        "recall": MetricThreshold(mode="relative", value=0.8, greater_is_better=True),
+        "f1": MetricThreshold(mode="relative", value=0.8, greater_is_better=True),
+        "positive_prediction_rate": MetricThreshold(
+            mode="relative",
+            value=0.8,
+            greater_is_better=True,
+        ),
+        "mae": MetricThreshold(mode="relative", value=1.25, greater_is_better=False),
+        "rmse": MetricThreshold(mode="relative", value=1.25, greater_is_better=False),
+    }
+
+
 class ModelSettings(BaseModel):
     classification_metrics: list[str] = Field(
         default_factory=lambda: ["accuracy", "precision", "recall", "f1"]
     )
     classification_probability_metrics: list[str] = Field(default_factory=lambda: ["roc_auc"])
     regression_metrics: list[str] = Field(default_factory=lambda: ["mae", "rmse", "r2"])
-    metric_thresholds: dict[str, MetricThreshold] = Field(
-        default_factory=lambda: {
-            "precision": MetricThreshold(mode="relative", value=0.8, greater_is_better=True),
-            "recall": MetricThreshold(mode="relative", value=0.8, greater_is_better=True),
-            "f1": MetricThreshold(mode="relative", value=0.8, greater_is_better=True),
-            "positive_prediction_rate": MetricThreshold(
-                mode="relative",
-                value=0.8,
-                greater_is_better=True,
-            ),
-            "mae": MetricThreshold(mode="relative", value=1.25, greater_is_better=False),
-            "rmse": MetricThreshold(mode="relative", value=1.25, greater_is_better=False),
-        }
-    )
+    metric_thresholds: dict[str, MetricThreshold] = Field(default_factory=default_metric_thresholds)
     include_perm_importance: bool = True
     log_shap: bool = True
     shap_sample_size: int = 1000
+
+    @model_validator(mode="before")
+    @classmethod
+    def merge_metric_threshold_defaults(cls, data: Any) -> Any:
+        if not isinstance(data, dict) or "metric_thresholds" not in data:
+            return data
+
+        defaults = {
+            name: threshold.model_dump() for name, threshold in default_metric_thresholds().items()
+        }
+        merged = defaults.copy()
+        provided = data["metric_thresholds"] or {}
+
+        for metric, threshold in provided.items():
+            metric_key = str(metric)
+            threshold_data = (
+                threshold.model_dump()
+                if isinstance(threshold, MetricThreshold)
+                else dict(threshold)
+            )
+            merged[metric_key] = {**defaults.get(metric_key, {}), **threshold_data}
+
+        return {**data, "metric_thresholds": merged}
 
 
 class Settings(BaseSettings):
