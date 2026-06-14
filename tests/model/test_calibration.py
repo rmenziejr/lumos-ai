@@ -115,6 +115,40 @@ def test_calibration_report_mapping_scores_use_mapping_labels() -> None:
     assert result.metadata["positive_label"] == "gold"
 
 
+def test_calibration_report_preserves_real_score_column_matching_proxy_name() -> None:
+    df = pd.DataFrame(
+        {
+            "actual": [0, 1, 0, 1],
+            "__lumosai_calibration_prediction__": [0.1, 0.9, 0.8, 0.2],
+        }
+    )
+
+    result = calibration_report(
+        df,
+        target="actual",
+        prediction_score="__lumosai_calibration_prediction__",
+        score_labels=[0, 1],
+        n_bins=2,
+    )
+
+    assert result.metrics["calibration/positive/brier"] == pytest.approx(0.325)
+    assert result.metrics["calibration/positive/ece"] == pytest.approx(0.35)
+    assert result.metrics["calibration/positive/brier"] != pytest.approx(0.0)
+    assert result.metrics["calibration/positive/ece"] != pytest.approx(0.0)
+
+
+def test_calibration_report_rejects_null_targets() -> None:
+    df = pd.DataFrame({"actual": [0, None, 1], "score": [0.2, 0.5, 0.8]})
+
+    with pytest.raises(LumosValidationError, match="target.*null"):
+        calibration_report(
+            df,
+            target="actual",
+            prediction_score="score",
+            score_labels=[0, 1],
+        )
+
+
 def test_calibration_report_rejects_invalid_bin_count() -> None:
     df = pd.DataFrame({"actual": [0, 1], "score": [0.2, 0.8]})
 

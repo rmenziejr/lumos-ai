@@ -16,9 +16,27 @@ from lumosai.model.scores import (
 )
 from lumosai.results import LumosResult
 
+_PROXY_PREDICTION_BASE = "__lumosai_calibration_prediction__"
+
 
 def _class_key(label: Any, scores: ClassificationScores) -> str:
     return "positive" if scores.positive_label is not None else safe_label(label)
+
+
+def _score_column_names(prediction_score: ScoreInput) -> set[str]:
+    if isinstance(prediction_score, str):
+        return {prediction_score}
+    return set(prediction_score.values())
+
+
+def _temporary_prediction_column(frame_columns: Any, prediction_score: ScoreInput) -> str:
+    reserved = set(frame_columns) | _score_column_names(prediction_score)
+    candidate = _PROXY_PREDICTION_BASE
+    suffix = 1
+    while candidate in reserved:
+        candidate = f"{_PROXY_PREDICTION_BASE}_{suffix}"
+        suffix += 1
+    return candidate
 
 
 def _validate_class_keys(labels: list[Any], scores: ClassificationScores) -> None:
@@ -97,7 +115,10 @@ def calibration_report(
 
     frame = to_pandas(current)
     require_columns(frame, [target])
-    proxy_prediction = "__lumosai_calibration_prediction__"
+    if frame[target].isna().any():
+        msg = f"target column {target!r} must not contain null values"
+        raise LumosValidationError(msg)
+    proxy_prediction = _temporary_prediction_column(frame.columns, prediction_score)
     working = frame.copy()
     working[proxy_prediction] = working[target]
     scores = normalize_classification_scores(
