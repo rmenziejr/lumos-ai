@@ -88,6 +88,13 @@ class ModelSettings(BaseModel):
         return {**data, "metric_thresholds": merged}
 
 
+class BundleSettings(BaseModel):
+    include_profile_in_training: bool = False
+    include_feature_importance_in_training: bool = True
+    include_previous_window_drift: bool = True
+    fail_fast: bool = True
+
+
 class Settings(BaseSettings):
     model_config = SettingsConfigDict(
         env_prefix="LUMOSAI_",
@@ -99,6 +106,7 @@ class Settings(BaseSettings):
     mlflow: MLflowSettings = Field(default_factory=MLflowSettings)
     data: DataSettings = Field(default_factory=DataSettings)
     model: ModelSettings = Field(default_factory=ModelSettings)
+    bundles: BundleSettings = Field(default_factory=BundleSettings)
 
 
 settings = Settings()

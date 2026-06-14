@@ -85,3 +85,22 @@ def test_data_sample_settings_env_override(monkeypatch) -> None:
     assert loaded.data.default_sample_size == 2500
     assert loaded.data.sample_artifact_format == "csv"
     assert loaded.data.log_sample_artifacts is True
+
+
+def test_bundle_settings_defaults() -> None:
+    loaded = Settings()
+
+    assert loaded.bundles.include_profile_in_training is False
+    assert loaded.bundles.include_feature_importance_in_training is True
+    assert loaded.bundles.include_previous_window_drift is True
+    assert loaded.bundles.fail_fast is True
+
+
+def test_bundle_settings_env_override(monkeypatch) -> None:
+    monkeypatch.setenv("LUMOSAI_BUNDLES__INCLUDE_PREVIOUS_WINDOW_DRIFT", "false")
+    monkeypatch.setenv("LUMOSAI_BUNDLES__FAIL_FAST", "false")
+
+    loaded = Settings()
+
+    assert loaded.bundles.include_previous_window_drift is False
+    assert loaded.bundles.fail_fast is False
