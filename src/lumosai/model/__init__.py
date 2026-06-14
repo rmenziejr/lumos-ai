@@ -2,7 +2,7 @@
 
 from typing import Any
 
-__all__ = ["bias_report", "get_metrics", "performance_report"]
+__all__ = ["bias_report", "feature_importance", "get_metrics", "performance_report"]
 
 
 def __getattr__(name: str) -> Any:
@@ -10,6 +10,10 @@ def __getattr__(name: str) -> Any:
         from lumosai.model.bias import bias_report
 
         return bias_report
+    if name == "feature_importance":
+        from lumosai.model.importance import feature_importance
+
+        return feature_importance
     if name == "get_metrics":
         from lumosai.model.metrics import get_metrics
 
