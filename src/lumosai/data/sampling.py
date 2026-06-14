@@ -46,6 +46,20 @@ def _required_columns_for_role(
     return [time_column] if time_column is not None else []
 
 
+def _exclude_train_benchmark_temporal_columns(
+    columns: list[str],
+    *,
+    time_column: str | None,
+    temporal_columns: list[str] | None,
+) -> list[str]:
+    excluded = {column for column in [time_column, *(temporal_columns or [])] if column}
+    selected = [column for column in columns if column not in excluded]
+    if not selected:
+        msg = "train_benchmark sample must include at least one non-temporal column"
+        raise LumosValidationError(msg)
+    return selected
+
+
 def _select_sample_columns(
     frame: pd.DataFrame,
     *,
@@ -64,17 +78,26 @@ def _select_sample_columns(
     )
     if prediction is not None and role != "train_benchmark":
         require_columns(frame, [prediction])
+    if role == "train_benchmark" and time_column is not None:
+        require_columns(frame, [time_column])
     if temporal_columns is not None:
         require_columns(frame, temporal_columns)
 
     if feature_columns is not None:
         if role == "train_benchmark":
             columns = _dedupe_preserve_order([target, *feature_columns])
+            require_columns(frame, columns)
+            columns = _exclude_train_benchmark_temporal_columns(
+                columns,
+                time_column=time_column,
+                temporal_columns=temporal_columns,
+            )
         elif role == "holdout":
             columns = _dedupe_preserve_order([time_column, target, prediction, *feature_columns])
+            require_columns(frame, columns)
         else:
             columns = _dedupe_preserve_order([time_column, *feature_columns])
-        require_columns(frame, columns)
+            require_columns(frame, columns)
         return frame[columns].copy()
 
     analysis_frame = select_analysis_frame(
@@ -84,11 +107,11 @@ def _select_sample_columns(
         required_columns=required_columns,
     )
     if role == "train_benchmark":
-        excluded = {column for column in [time_column, *(temporal_columns or [])] if column}
-        columns = [column for column in analysis_frame.columns if column not in excluded]
-        if not columns:
-            msg = "train_benchmark sample must include at least one non-temporal column"
-            raise LumosValidationError(msg)
+        columns = _exclude_train_benchmark_temporal_columns(
+            list(analysis_frame.columns),
+            time_column=time_column,
+            temporal_columns=temporal_columns,
+        )
         return analysis_frame[columns].copy()
     if role == "holdout":
         ordered = _dedupe_preserve_order([time_column, target, prediction])

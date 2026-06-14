@@ -39,6 +39,33 @@ def test_train_benchmark_excludes_temporal_columns_and_prefers_feature_columns()
     assert result.metadata["report_type"] == "sample"
 
 
+def test_train_benchmark_excludes_temporal_columns_even_when_feature_columns_include_them() -> None:
+    result = build_sample(
+        make_frame(),
+        role="train_benchmark",
+        sample_size=4,
+        target="target",
+        feature_columns=["event_date", "amount", "day_of_week"],
+        temporal_columns=["day_of_week"],
+        time_column="event_date",
+    )
+
+    sample = result.artifacts["sample"]
+
+    assert list(sample.columns) == ["target", "amount"]
+
+
+def test_train_benchmark_rejects_only_temporal_feature_columns() -> None:
+    with pytest.raises(LumosValidationError, match="non-temporal column"):
+        build_sample(
+            make_frame(),
+            role="train_benchmark",
+            feature_columns=["event_date", "day_of_week"],
+            temporal_columns=["day_of_week"],
+            time_column="event_date",
+        )
+
+
 def test_holdout_auto_uses_most_recent_rows_when_time_column_is_available() -> None:
     result = build_sample(
         make_frame(),
