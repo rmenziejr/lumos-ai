@@ -7,6 +7,8 @@ from importlib import import_module
 from pathlib import Path
 from typing import Any
 
+import pandas as pd
+
 from lumosai.exceptions import LumosConfigurationError, LumosOptionalDependencyError
 from lumosai.results import LumosResult
 from lumosai.settings import Settings, settings
@@ -86,6 +88,50 @@ def log_result(
             mlflow.log_metrics(result.metrics)
         if loaded_settings.mlflow.log_dicts:
             mlflow.log_dict(result.to_dict(), "lumosai_result.json")
+    return result
+
+
+def log_sample(
+    result: LumosResult,
+    *,
+    artifact_path: str | Path | None = None,
+    experiment_name: str | None = None,
+    loaded_settings: Settings = settings,
+    log_metadata: bool | None = None,
+    log_artifact: bool | None = None,
+) -> LumosResult:
+    sample = result.artifacts.get("sample")
+    local_path = Path(artifact_path) if artifact_path is not None else None
+    if isinstance(sample, pd.DataFrame) and local_path is not None:
+        local_path.parent.mkdir(parents=True, exist_ok=True)
+        if local_path.suffix == ".csv":
+            sample.to_csv(local_path, index=False)
+        else:
+            sample.to_parquet(local_path, index=False)
+        result.metadata["sample_artifact_path"] = str(local_path)
+
+    resolved = resolve_experiment_name(experiment_name, loaded_settings)
+    if resolved is None:
+        result.metadata["logged_to_mlflow"] = False
+        return result
+
+    should_log_metadata = (
+        loaded_settings.data.log_sample_metadata if log_metadata is None else log_metadata
+    )
+    should_log_artifact = (
+        loaded_settings.data.log_sample_artifacts if log_artifact is None else log_artifact
+    )
+
+    with mlflow_run(resolved, loaded_settings) as (mlflow, run_id):
+        if mlflow is None:
+            result.metadata["logged_to_mlflow"] = False
+            return result
+        result.metadata["logged_to_mlflow"] = True
+        result.metadata["mlflow_run_id"] = run_id
+        if should_log_metadata:
+            mlflow.log_dict(result.summary, "lumosai_sample_metadata.json")
+        if should_log_artifact and local_path is not None:
+            mlflow.log_artifact(str(local_path), artifact_path="samples")
     return result
 
 

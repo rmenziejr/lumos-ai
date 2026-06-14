@@ -1,13 +1,15 @@
 from __future__ import annotations
 
+from contextlib import nullcontext
 from pathlib import Path
 from types import SimpleNamespace
 from typing import Any
 
+import pandas as pd
 import pytest
 
 import lumosai.mlflow as mlflow_adapter
-from lumosai.mlflow import log_artifact_paths, log_result, resolve_experiment_name
+from lumosai.mlflow import log_artifact_paths, log_result, log_sample, resolve_experiment_name
 from lumosai.results import LumosResult
 from lumosai.settings import Settings
 
@@ -15,8 +17,8 @@ from lumosai.settings import Settings
 class FakeMlflow:
     def __init__(self) -> None:
         self.metrics: dict[str, float] = {}
-        self.dicts: dict[str, dict[str, Any]] = {}
-        self.artifacts: list[tuple[str, str]] = []
+        self.dicts: list[tuple[dict[str, Any], str]] = []
+        self.artifacts: list[tuple[str, str | None]] = []
         self.experiment_name: str | None = None
 
     def set_experiment(self, experiment_name: str) -> None:
@@ -29,10 +31,10 @@ class FakeMlflow:
         self.metrics.update(metrics)
 
     def log_dict(self, payload: dict[str, Any], artifact_file: str) -> None:
-        self.dicts[artifact_file] = payload
+        self.dicts.append((payload, artifact_file))
 
     def log_artifact(self, local_path: str, artifact_path: str | None = None) -> None:
-        self.artifacts.append((local_path, artifact_path or ""))
+        self.artifacts.append((local_path, artifact_path))
 
 
 def test_resolve_experiment_name_prefers_argument() -> None:
@@ -63,10 +65,73 @@ def test_log_result_logs_metadata_before_dict(monkeypatch: pytest.MonkeyPatch) -
 
     assert logged.metadata["logged_to_mlflow"] is True
     assert logged.metadata["mlflow_run_id"] == "active-run"
-    assert fake_mlflow.dicts["lumosai_result.json"]["metadata"] == {
-        "logged_to_mlflow": True,
-        "mlflow_run_id": "active-run",
-    }
+    assert fake_mlflow.dicts == [
+        (
+            {
+                "metrics": {"performance/f1": 1.0},
+                "summary": {},
+                "flagged": [],
+                "artifacts": {},
+                "metadata": {
+                    "logged_to_mlflow": True,
+                    "mlflow_run_id": "active-run",
+                },
+            },
+            "lumosai_result.json",
+        )
+    ]
+
+
+def test_log_sample_logs_metadata_without_raw_artifact(monkeypatch, tmp_path) -> None:
+    fake = FakeMlflow()
+    result = LumosResult(
+        summary={"role": "train_benchmark", "sample_rows": 2},
+        artifacts={"sample": pd.DataFrame({"x": [1, 2]})},
+        metadata={"report_type": "sample"},
+    )
+
+    monkeypatch.setattr(
+        "lumosai.mlflow.mlflow_run",
+        lambda *_args, **_kwargs: nullcontext((fake, "run-1")),
+    )
+
+    logged = log_sample(
+        result,
+        artifact_path=tmp_path / "sample.csv",
+        experiment_name="monitoring",
+        log_metadata=True,
+        log_artifact=False,
+    )
+
+    assert fake.dicts == [
+        ({"role": "train_benchmark", "sample_rows": 2}, "lumosai_sample_metadata.json")
+    ]
+    assert fake.artifacts == []
+    assert logged.metadata["sample_artifact_path"].endswith("sample.csv")
+
+
+def test_log_sample_raw_artifact_is_explicit_opt_in(monkeypatch, tmp_path) -> None:
+    fake = FakeMlflow()
+    result = LumosResult(
+        summary={"role": "holdout", "sample_rows": 2},
+        artifacts={"sample": pd.DataFrame({"x": [1, 2]})},
+        metadata={"report_type": "sample"},
+    )
+
+    monkeypatch.setattr(
+        "lumosai.mlflow.mlflow_run",
+        lambda *_args, **_kwargs: nullcontext((fake, "run-1")),
+    )
+
+    log_sample(
+        result,
+        artifact_path=tmp_path / "sample.csv",
+        experiment_name="monitoring",
+        log_metadata=True,
+        log_artifact=True,
+    )
+
+    assert fake.artifacts == [(str(tmp_path / "sample.csv"), "samples")]
 
 
 def test_log_artifact_paths_honors_disabled_artifact_logging(
