@@ -25,6 +25,8 @@ Most report functions accept:
 
 For model reports, `target` is the outcome column. For profiling, `target` is also the outcome column and is moved to the first profiled column.
 
+`categorical_columns` is a semantic override, not a dataframe type conversion. Use it when a column's storage type is numeric or string-like but the report should treat it as categorical.
+
 ## Data APIs
 
 ### `profile(...)`
@@ -78,6 +80,43 @@ Samples rows per time period.
 - Requires a valid non-null timestamp column.
 - Rejects `sample_size < 1` and `min_per_period < 1`.
 - Returns a pandas dataframe.
+
+### `build_sample(...)`
+
+```python
+build_sample(
+    data,
+    *,
+    role,
+    sample_size=None,
+    strategy="auto",
+    target=None,
+    prediction=None,
+    feature_columns=None,
+    categorical_columns=None,
+    time_column=None,
+    temporal_columns=None,
+    stratify_by=None,
+    random_state=42,
+    artifact_path=None,
+    experiment_name=None,
+    log_metadata=None,
+    log_artifact=None,
+)
+```
+
+Builds a bounded representative sample for training benchmarks, holdouts, or monitoring windows.
+
+- `role` must be `"train_benchmark"`, `"holdout"`, or `"monitoring_window"`.
+- `strategy` may be `"auto"`, `"random"`, `"stratified"`, `"temporal_recent"`, or `"temporal_bucket"`.
+- `feature_columns` selects model features; `target`, `prediction`, `time_column`, and `temporal_columns` are added when provided.
+- `categorical_columns` marks semantic categorical features and must be included in the sampled columns.
+- Returns the sampled pandas dataframe as `result.artifacts["sample"]`.
+- Adds sample role, strategy, row counts, columns, schema summary, digest, categorical columns, and optional time range to metadata/summary.
+- Writes a local artifact when `artifact_path` is provided.
+- An explicit `artifact_path` suffix controls the format; suffixless paths use `settings.data.sample_artifact_format`.
+- When `experiment_name` is provided, `log_metadata=None` defers to `settings.data.log_sample_metadata`, which defaults to `True`.
+- Raw sample artifact logging is opt-in: `log_artifact=None` defers to `settings.data.log_sample_artifacts`, which defaults to `False`; pass `log_artifact=True` to log the raw artifact for that call.
 
 ### `drift_report(...)`
 
@@ -211,6 +250,35 @@ Computes group-wise model behavior across protected attributes.
 - Missing and out-of-bin protected values are retained as explicit groups.
 - Stores `feature_columns` and `categorical_columns` in metadata when provided.
 
+### `feature_importance(...)`
+
+```python
+feature_importance(
+    model,
+    data,
+    *,
+    target,
+    feature_columns,
+    method="permutation",
+    scoring=None,
+    n_repeats=5,
+    sample_size=None,
+    random_state=42,
+    report_name=None,
+    experiment_name=None,
+)
+```
+
+Computes model feature importance after training or evaluation.
+
+- `method="permutation"` is the default and uses scikit-learn permutation importance.
+- `method="shap"` computes SHAP mean absolute importance and requires the optional `lumosai[importance]` dependency.
+- `feature_columns` must contain at least one feature and all features must exist in `data`.
+- `sample_size` optionally samples rows before computing importance.
+- `scoring`, `n_repeats`, and `random_state` apply to permutation importance.
+- Returns metrics under `importance/<feature>` and sorted feature rows in `result.summary["features"]`.
+- Stores method, feature columns, and optional `report_name` in metadata.
+
 ## Settings
 
 Import global settings:
@@ -218,6 +286,13 @@ Import global settings:
 ```python
 from lumosai import settings
 ```
+
+Relevant sample defaults live under `settings.data`:
+
+- `default_sample_size`: default sample size for temporal bucket sampling.
+- `sample_artifact_format`: format for suffixless sample artifact paths, either `"parquet"` or `"csv"`.
+- `log_sample_metadata`: default metadata logging behavior for `build_sample()`.
+- `log_sample_artifacts`: default raw sample artifact logging behavior for `build_sample()`.
 
 Settings use nested Pydantic models and environment variables with the `LUMOSAI_` prefix.
 

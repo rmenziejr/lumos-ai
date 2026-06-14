@@ -14,6 +14,9 @@ It provides helpers for dataset profiling, data drift, model performance, and bi
 - [Data pipeline monitoring](recipes/data-pipeline-monitoring.md)
 - [Training pipeline reporting](recipes/training-pipeline-reporting.md)
 - [Ongoing monitoring pipeline](recipes/ongoing-monitoring-pipeline.md)
+- [Representative samples](recipes/representative-samples.md)
+- [Feature importance](recipes/feature-importance.md)
+- [Pipeline patterns](recipes/pipeline-patterns.md)
 - [MLflow layout](recipes/mlflow-layout.md)
 
 ## Core Concepts

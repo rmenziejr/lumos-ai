@@ -12,6 +12,9 @@ It provides simple function-first APIs for profiling, drift, performance, and bi
 - [Data pipeline monitoring](docs/recipes/data-pipeline-monitoring.md)
 - [Training pipeline reporting](docs/recipes/training-pipeline-reporting.md)
 - [Ongoing monitoring pipeline](docs/recipes/ongoing-monitoring-pipeline.md)
+- [Representative samples](docs/recipes/representative-samples.md)
+- [Feature importance](docs/recipes/feature-importance.md)
+- [Pipeline patterns](docs/recipes/pipeline-patterns.md)
 - [MLflow layout](docs/recipes/mlflow-layout.md)
 
 Local docs can be served with:

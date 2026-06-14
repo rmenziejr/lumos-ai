@@ -59,6 +59,29 @@ print(result.flagged)
 
 Temporal features are excluded from drift calculations after validation.
 
+## Build Representative Samples
+
+```python
+from lumosai.data import build_sample
+
+sample = build_sample(
+    feature_table,
+    role="train_benchmark",
+    target="churned",
+    feature_columns=["tenure", "plan", "day_of_week"],
+    categorical_columns=["plan", "day_of_week"],
+    time_column="event_date",
+    sample_size=10000,
+    artifact_path="artifacts/train_benchmark",
+    experiment_name="model-training",
+)
+
+print(sample.summary)
+print(sample.metadata)
+```
+
+When `artifact_path` has no suffix, `settings.data.sample_artifact_format` controls the file format. With MLflow, sample metadata logging follows settings and raw sample artifact logging is opt-in.
+
 ## Check Model Performance
 
 ```python
@@ -73,6 +96,23 @@ result = performance_report(
 )
 
 print(result.metrics)
+```
+
+## Check Feature Importance
+
+```python
+from lumosai.model import feature_importance
+
+result = feature_importance(
+    model,
+    validation_frame,
+    target="actual",
+    feature_columns=["tenure", "plan_code", "day_of_week"],
+    report_name="Holdout Feature Importance",
+    experiment_name="model-training",
+)
+
+print(result.summary["features"])
 ```
 
 ## Check Bias Across Groups
