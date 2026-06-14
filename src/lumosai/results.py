@@ -44,3 +44,36 @@ class LumosResult:
             "artifacts": json_safe_artifacts(self.artifacts),
             "metadata": self.metadata,
         }
+
+
+@dataclass(slots=True)
+class LumosRun:
+    """Grouped result returned by lumosai bundle functions."""
+
+    run_type: str
+    results: dict[str, LumosResult]
+    metadata: dict[str, Any] = field(default_factory=dict)
+
+    @property
+    def metrics(self) -> dict[str, float]:
+        merged: dict[str, float] = {}
+        for result in self.results.values():
+            merged.update(result.metrics)
+        return merged
+
+    @property
+    def flagged(self) -> list[dict[str, Any]]:
+        findings: list[dict[str, Any]] = []
+        for key, result in self.results.items():
+            for item in result.flagged:
+                findings.append({**item, "result_key": key})
+        return findings
+
+    def to_dict(self) -> dict[str, Any]:
+        return {
+            "run_type": self.run_type,
+            "metrics": self.metrics,
+            "flagged": self.flagged,
+            "metadata": self.metadata,
+            "results": {key: result.to_dict() for key, result in self.results.items()},
+        }

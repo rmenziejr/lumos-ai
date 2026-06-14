@@ -5,7 +5,7 @@ from pathlib import Path
 import pandas as pd
 
 import lumosai
-from lumosai.results import LumosResult, json_safe_artifacts
+from lumosai.results import LumosResult, LumosRun, json_safe_artifacts
 
 
 def test_public_package_imports_during_staged_implementation() -> None:
@@ -38,6 +38,57 @@ def test_lumos_result_to_dict_excludes_report_and_serializes_artifacts() -> None
         "flagged": [{"metric": "f1", "reason": "below_threshold"}],
         "artifacts": {"html": "report.html", "frame": "<DataFrame shape=(1, 1)>"},
         "metadata": {"report_type": "performance"},
+    }
+
+
+def test_lumos_run_aggregates_metrics_and_flagged_items() -> None:
+    run = LumosRun(
+        run_type="monitoring",
+        results={
+            "drift_benchmark": LumosResult(
+                metrics={"drift/benchmark/share": 0.5},
+                flagged=[{"metric": "share", "value": 0.5}],
+            ),
+            "performance": LumosResult(metrics={"performance/f1": 0.8}),
+        },
+        metadata={"model": "churn"},
+    )
+
+    assert run.metrics == {
+        "drift/benchmark/share": 0.5,
+        "performance/f1": 0.8,
+    }
+    assert run.flagged == [{"metric": "share", "value": 0.5, "result_key": "drift_benchmark"}]
+
+
+def test_lumos_run_to_dict_is_json_safe() -> None:
+    run = LumosRun(
+        run_type="monitoring",
+        results={
+            "sample": LumosResult(
+                artifacts={"frame": pd.DataFrame({"x": [1, 2]})},
+                metadata={"report_type": "sample"},
+            )
+        },
+        metadata={"skipped_reports": {"bias": "protected_attribute not provided"}},
+    )
+
+    payload = run.to_dict()
+
+    assert payload == {
+        "run_type": "monitoring",
+        "metrics": {},
+        "flagged": [],
+        "metadata": {"skipped_reports": {"bias": "protected_attribute not provided"}},
+        "results": {
+            "sample": {
+                "metrics": {},
+                "summary": {},
+                "flagged": [],
+                "artifacts": {"frame": "<DataFrame shape=(2, 1)>"},
+                "metadata": {"report_type": "sample"},
+            }
+        },
     }
 
 
