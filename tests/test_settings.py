@@ -2,6 +2,8 @@ from __future__ import annotations
 
 from pathlib import Path
 
+import pytest
+from pydantic import ValidationError
 from pytest import MonkeyPatch
 
 from lumosai.settings import MetricThreshold, Settings
@@ -55,3 +57,10 @@ def test_metric_threshold_defaults_include_metric_direction() -> None:
         value=1.25,
         greater_is_better=False,
     )
+
+
+def test_data_drift_share_threshold_must_be_share(monkeypatch: MonkeyPatch) -> None:
+    monkeypatch.setenv("LUMOSAI_DATA__DRIFT_SHARE_THRESHOLD", "1.5")
+
+    with pytest.raises(ValidationError):
+        Settings()

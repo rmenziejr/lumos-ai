@@ -23,7 +23,7 @@ class MLflowSettings(BaseModel):
 
 
 class DataSettings(BaseModel):
-    drift_share_threshold: float = 0.1
+    drift_share_threshold: float = Field(default=0.1, ge=0.0, le=1.0)
     profile_minimal_default: bool = True
     log_analysis: bool = True
 
