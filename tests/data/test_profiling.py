@@ -60,6 +60,18 @@ def test_temporal_sample_rejects_invalid_sample_size() -> None:
         temporal_sample(frame, time_column="event_date", sample_size=0)
 
 
+def test_temporal_sample_rejects_invalid_min_per_period() -> None:
+    frame = pd.DataFrame(
+        {
+            "event_date": pd.to_datetime(["2026-01-01"]),
+            "value": [1],
+        }
+    )
+
+    with pytest.raises(LumosValidationError, match="min_per_period"):
+        temporal_sample(frame, time_column="event_date", min_per_period=0)
+
+
 def test_temporal_sample_rejects_null_or_invalid_timestamps() -> None:
     frame = pd.DataFrame(
         {
