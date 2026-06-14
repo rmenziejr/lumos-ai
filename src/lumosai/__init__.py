@@ -8,6 +8,7 @@ from lumosai.settings import settings
 __all__ = [
     "LumosResult",
     "bias_report",
+    "build_sample",
     "drift_report",
     "get_metrics",
     "performance_report",
@@ -17,7 +18,7 @@ __all__ = [
 
 
 def __getattr__(name: str) -> Any:
-    if name in {"drift_report", "profile"}:
+    if name in {"build_sample", "drift_report", "profile"}:
         from lumosai import data
 
         return getattr(data, name)

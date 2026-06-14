@@ -15,3 +15,10 @@ def test_top_level_exports_match_domain_exports() -> None:
     assert la.get_metrics is get_metrics
     assert la.LumosResult is LumosResult
     assert la.settings is settings
+
+
+def test_sample_builder_public_api() -> None:
+    import lumosai
+    from lumosai.data import build_sample
+
+    assert lumosai.build_sample is build_sample
