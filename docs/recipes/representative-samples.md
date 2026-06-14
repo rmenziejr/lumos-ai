@@ -6,7 +6,7 @@ Raw samples are not sent to MLflow by default. When `experiment_name` is provide
 
 ## Training Benchmark
 
-Use a training benchmark as the stable reference for later drift checks. It should represent the model features and target distribution used during training. Temporal columns are included only when you pass `time_column` or `temporal_columns`; they are excluded from the model feature set by default.
+Use a training benchmark as the stable reference for later drift checks. It should represent the model features and target distribution used during training. `time_column` and `temporal_columns` can be passed for validation and sampling context, but they are excluded from the train benchmark sample output by default.
 
 ```python
 from lumosai.data import build_sample

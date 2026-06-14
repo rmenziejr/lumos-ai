@@ -109,7 +109,8 @@ Builds a bounded representative sample for training benchmarks, holdouts, or mon
 
 - `role` must be `"train_benchmark"`, `"holdout"`, or `"monitoring_window"`.
 - `strategy` may be `"auto"`, `"random"`, `"stratified"`, `"temporal_recent"`, or `"temporal_bucket"`.
-- `feature_columns` selects model features; `target`, `prediction`, `time_column`, and `temporal_columns` are added when provided.
+- `feature_columns` selects model features; `target`, `prediction`, and `time_column` are included when required by the sample role.
+- For `role="train_benchmark"`, `time_column` and `temporal_columns` are validated when provided but excluded from the sampled output.
 - `categorical_columns` marks semantic categorical features and must be included in the sampled columns.
 - Returns the sampled pandas dataframe as `result.artifacts["sample"]`.
 - Adds sample role, strategy, row counts, columns, schema summary, digest, categorical columns, and optional time range to metadata/summary.
