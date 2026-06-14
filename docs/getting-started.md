@@ -26,6 +26,17 @@ print(result.artifacts)
 ```
 
 `profile()` creates a ydata-profiling report. Without MLflow logging, the HTML artifact is kept locally according to artifact settings.
+Use `target` and `feature_columns` to focus the report and move the outcome column to the first position.
+
+```python
+profile(
+    feature_table,
+    target="churned",
+    feature_columns=["tenure", "plan", "day_of_week"],
+    categorical_columns=["plan", "day_of_week"],
+    report_name="Training Feature Profile",
+)
+```
 
 ## Check Data Drift
 
@@ -36,7 +47,10 @@ result = drift_report(
     reference=train_benchmark,
     current=current_window,
     temporal_features=["event_date"],
+    feature_columns=["tenure", "plan", "day_of_week"],
+    categorical_columns=["plan", "day_of_week"],
     comparison="benchmark",
+    report_name="Benchmark Drift",
 )
 
 print(result.metrics)
@@ -55,6 +69,7 @@ result = performance_report(
     target="actual",
     prediction="prediction",
     prediction_score="prediction_score",
+    report_name="Holdout Performance",
 )
 
 print(result.metrics)
@@ -70,6 +85,7 @@ result = bias_report(
     target="actual",
     prediction="prediction",
     protected_attribute=["region", "segment"],
+    report_name="Holdout Bias",
 )
 
 print(result.summary)

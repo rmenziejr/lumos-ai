@@ -44,4 +44,18 @@ uv run mypy src/lumosai
 
 ## Documentation
 
-Docs are plain Markdown for now. A future GitHub Pages setup can add MkDocs without moving the current files.
+Docs are plain Markdown served by MkDocs locally.
+
+Run the local docs server:
+
+```bash
+uv run mkdocs serve
+```
+
+Build docs strictly:
+
+```bash
+uv run mkdocs build --strict
+```
+
+A future GitHub Pages setup can publish the same MkDocs site with a workflow.

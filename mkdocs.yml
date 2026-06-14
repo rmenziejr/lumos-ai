@@ -1,0 +1,25 @@
+site_name: lumosai
+site_description: Opinionated ML monitoring and reporting helpers.
+repo_url: https://github.com/rmenzie/lumos-ai
+theme:
+  name: material
+  features:
+    - navigation.sections
+    - navigation.expand
+    - content.code.copy
+nav:
+  - Overview: index.md
+  - Getting Started: getting-started.md
+  - API Reference: api.md
+  - Recipes:
+      - Data Pipeline Monitoring: recipes/data-pipeline-monitoring.md
+      - Training Pipeline Reporting: recipes/training-pipeline-reporting.md
+      - Ongoing Monitoring Pipeline: recipes/ongoing-monitoring-pipeline.md
+      - MLflow Layout: recipes/mlflow-layout.md
+  - Development: development.md
+markdown_extensions:
+  - admonition
+  - toc:
+      permalink: true
+  - pymdownx.highlight
+  - pymdownx.superfences

@@ -13,3 +13,9 @@ It provides simple function-first APIs for profiling, drift, performance, and bi
 - [Training pipeline reporting](docs/recipes/training-pipeline-reporting.md)
 - [Ongoing monitoring pipeline](docs/recipes/ongoing-monitoring-pipeline.md)
 - [MLflow layout](docs/recipes/mlflow-layout.md)
+
+Local docs can be served with:
+
+```bash
+uv run mkdocs serve
+```
