@@ -4,6 +4,7 @@ from typing import Any
 
 import narwhals as nw
 import pandas as pd
+from narwhals.exceptions import DuplicateError
 
 from lumosai.data.validation import require_no_duplicate_columns
 from lumosai.exceptions import LumosValidationError
@@ -17,6 +18,9 @@ def to_pandas(df: Any) -> pd.DataFrame:
     try:
         native = nw.from_native(df)
         pandas_df = native.to_pandas()
+    except DuplicateError as exc:
+        msg = f"dataframe has duplicate columns: {exc}"
+        raise LumosValidationError(msg) from exc
     except Exception as exc:
         msg = "df must be a Narwhals-compatible dataframe object"
         raise LumosValidationError(msg) from exc

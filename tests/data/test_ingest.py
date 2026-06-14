@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import pandas as pd
 import polars as pl
+import pyarrow as pa
 import pytest
 
 from lumosai.data.ingest import to_pandas
@@ -35,6 +36,13 @@ def test_to_pandas_rejects_duplicate_pandas_columns() -> None:
 
     with pytest.raises(LumosValidationError, match="duplicate columns: a"):
         to_pandas(frame)
+
+
+def test_to_pandas_rejects_duplicate_non_pandas_columns() -> None:
+    table = pa.table([[1], [2]], names=["a", "a"])
+
+    with pytest.raises(LumosValidationError, match="duplicate columns"):
+        to_pandas(table)
 
 
 def test_to_pandas_rejects_invalid_input() -> None:
