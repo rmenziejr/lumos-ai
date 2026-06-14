@@ -82,7 +82,7 @@ def test_log_result_logs_metadata_before_dict(monkeypatch: pytest.MonkeyPatch) -
     ]
 
 
-def test_log_run_logs_metrics_and_combined_payload(
+def test_log_run_logs_combined_payload_without_relogging_metrics(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
     fake_mlflow = FakeMlflow()
@@ -99,12 +99,43 @@ def test_log_run_logs_metrics_and_combined_payload(
 
     assert logged.metadata["logged_to_mlflow"] is True
     assert logged.metadata["mlflow_run_id"] == "active-run"
-    assert fake_mlflow.metrics == {
+    assert fake_mlflow.metrics == {}
+    assert fake_mlflow.dicts[-1][1] == "lumosai_run.json"
+    assert fake_mlflow.dicts[-1][0]["metrics"] == {
         "performance/f1": 0.8,
         "drift/benchmark/share": 0.2,
     }
-    assert fake_mlflow.dicts[-1][1] == "lumosai_run.json"
-    assert fake_mlflow.dicts[-1][0]["run_type"] == "monitoring"
+
+
+def test_log_run_without_experiment_marks_not_logged() -> None:
+    run = LumosRun(run_type="monitoring", results={})
+
+    logged = mlflow_adapter.log_run(run, experiment_name=None)
+
+    assert logged.metadata["logged_to_mlflow"] is False
+
+
+def test_log_run_honors_disabled_dict_logging(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    fake_mlflow = FakeMlflow()
+    monkeypatch.setattr(mlflow_adapter, "require_mlflow", lambda: fake_mlflow)
+    loaded = Settings()
+    loaded.mlflow.log_dicts = False
+    run = LumosRun(
+        run_type="monitoring",
+        results={"performance": LumosResult(metrics={"performance/f1": 0.8})},
+    )
+
+    logged = mlflow_adapter.log_run(
+        run,
+        experiment_name="experiment",
+        loaded_settings=loaded,
+    )
+
+    assert logged.metadata["logged_to_mlflow"] is True
+    assert fake_mlflow.dicts == []
+    assert fake_mlflow.metrics == {}
 
 
 def test_log_sample_logs_metadata_without_raw_artifact(monkeypatch, tmp_path) -> None:

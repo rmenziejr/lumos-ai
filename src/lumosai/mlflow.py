@@ -108,8 +108,6 @@ def log_run(
             return run
         run.metadata["logged_to_mlflow"] = True
         run.metadata["mlflow_run_id"] = run_id
-        if run.metrics:
-            mlflow.log_metrics(run.metrics)
         if loaded_settings.mlflow.log_dicts:
             mlflow.log_dict(run.to_dict(), "lumosai_run.json")
     return run
