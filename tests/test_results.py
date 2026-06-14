@@ -15,7 +15,7 @@ def test_public_package_imports_during_staged_implementation() -> None:
 def test_wildcard_exports_import_during_staged_implementation() -> None:
     namespace: dict[str, object] = {}
 
-    exec("from lumosai import *", namespace)
+    exec("from lumosai import *", namespace)  # noqa: S102
 
     assert namespace["LumosResult"] is LumosResult
 
