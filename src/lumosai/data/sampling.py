@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import hashlib
+import json
 from pathlib import Path
 from typing import Any, Literal
 
@@ -211,7 +212,10 @@ def _schema_summary(frame: pd.DataFrame) -> dict[str, str]:
 
 
 def _digest_frame(frame: pd.DataFrame) -> str:
-    hashed = pd.util.hash_pandas_object(frame, index=False).values
+    stable_frame = frame.apply(
+        lambda column: column.map(lambda value: json.dumps(value, sort_keys=True, default=str))
+    )
+    hashed = pd.util.hash_pandas_object(stable_frame, index=False).values
     return hashlib.sha256(hashed.tobytes()).hexdigest()
 
 
@@ -243,8 +247,8 @@ def build_sample(
     random_state: int = 42,
     artifact_path: str | Path | None = None,
     experiment_name: str | None = None,
-    log_metadata: bool = True,
-    log_artifact: bool = False,
+    log_metadata: bool | None = None,
+    log_artifact: bool | None = None,
 ) -> LumosResult:
     frame = to_pandas(data)
     if role not in {"train_benchmark", "holdout", "monitoring_window"}:

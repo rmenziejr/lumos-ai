@@ -124,3 +124,33 @@ def test_build_sample_writes_local_artifact(tmp_path) -> None:
 
     assert path.exists()
     assert result.metadata["sample_artifact_path"] == str(path)
+
+
+def test_build_sample_digest_handles_nested_object_values() -> None:
+    frame = pd.DataFrame({"feature": [{"a": 1}, {"b": [2, 3]}], "target": [0, 1]})
+
+    result = build_sample(
+        frame,
+        role="train_benchmark",
+        target="target",
+        feature_columns=["feature"],
+        sample_size=None,
+    )
+
+    assert isinstance(result.summary["digest"], str)
+    assert len(result.summary["digest"]) == 64
+
+
+def test_build_sample_leaves_log_flags_to_settings_by_default(monkeypatch) -> None:
+    captured = {}
+
+    def fake_log_sample(result, **kwargs):
+        captured.update(kwargs)
+        return result
+
+    monkeypatch.setattr("lumosai.data.sampling.log_sample", fake_log_sample)
+
+    build_sample(make_frame(), role="monitoring_window", feature_columns=["amount"])
+
+    assert captured["log_metadata"] is None
+    assert captured["log_artifact"] is None

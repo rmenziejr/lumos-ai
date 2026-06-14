@@ -159,6 +159,28 @@ def test_log_sample_does_not_log_raw_artifact_without_dataframe(monkeypatch, tmp
     assert not (tmp_path / "missing.csv").exists()
 
 
+def test_log_sample_uses_sample_artifact_format_for_suffixless_path(tmp_path) -> None:
+    loaded = Settings()
+    loaded.data.sample_artifact_format = "csv"
+    result = LumosResult(
+        summary={"role": "holdout", "sample_rows": 2},
+        artifacts={"sample": pd.DataFrame({"x": [1, 2]})},
+        metadata={"report_type": "sample"},
+    )
+
+    logged = log_sample(
+        result,
+        artifact_path=tmp_path / "sample",
+        loaded_settings=loaded,
+        log_metadata=False,
+        log_artifact=False,
+    )
+
+    expected = tmp_path / "sample.csv"
+    assert expected.exists()
+    assert logged.metadata["sample_artifact_path"] == str(expected)
+
+
 def test_log_artifact_paths_honors_disabled_artifact_logging(
     monkeypatch: pytest.MonkeyPatch,
     tmp_path: Path,

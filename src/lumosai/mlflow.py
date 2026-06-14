@@ -104,13 +104,16 @@ def log_sample(
     local_path = Path(artifact_path) if artifact_path is not None else None
     written_path: Path | None = None
     if isinstance(sample, pd.DataFrame) and local_path is not None:
+        if not local_path.suffix:
+            artifact_format = loaded_settings.data.sample_artifact_format.lstrip(".")
+            local_path = local_path.with_suffix(f".{artifact_format}")
         local_path.parent.mkdir(parents=True, exist_ok=True)
         if local_path.suffix == ".csv":
             sample.to_csv(local_path, index=False)
         else:
             sample.to_parquet(local_path, index=False)
         written_path = local_path
-        result.metadata["sample_artifact_path"] = str(local_path)
+        result.metadata["sample_artifact_path"] = str(written_path)
 
     resolved = resolve_experiment_name(experiment_name, loaded_settings)
     if resolved is None:
