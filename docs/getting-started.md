@@ -115,6 +115,19 @@ result = feature_importance(
 print(result.summary["features"])
 ```
 
+## Set Shared Defaults
+
+Use `lumosai.settings` as the control point for standards that should be reused across scripts, scheduled jobs, and notebooks. Settings can define MLflow behavior, artifact handling, sample defaults, metric thresholds, and bundle behavior without passing the same options to every report call.
+
+```bash
+export LUMOSAI_MLFLOW__DEFAULT_EXPERIMENT_NAME=model-monitoring
+export LUMOSAI_DATA__DEFAULT_SAMPLE_SIZE=25000
+export LUMOSAI_MODEL__METRIC_THRESHOLDS__RECALL__VALUE=0.9
+export LUMOSAI_BUNDLES__FAIL_FAST=true
+```
+
+Nested environment variables use the `LUMOSAI_` prefix and double underscores between settings groups.
+
 ## Check Bias Across Groups
 
 ```python

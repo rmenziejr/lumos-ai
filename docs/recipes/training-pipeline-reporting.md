@@ -3,6 +3,8 @@
 After scoring a holdout or validation set, use `performance_report()`, `calibration_report()`, and `bias_report()` to record model behavior.
 Install `lumosai[mlflow]` before passing `experiment_name`; omit `experiment_name` for local-only results.
 To keep the reports in one MLflow run, start the run before calling `lumosai`.
+When a scheduled training job should run the standard sample, performance, bias, and importance checks together, use `training_report()`.
+For Optuna tuning runs, nested MLflow trials, fold-level evaluation, and final model diagnostics, see [Tuning and Final Training](tuning-and-final-training.md).
 
 ```python
 import mlflow

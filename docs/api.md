@@ -245,6 +245,45 @@ Builds the standard production monitoring bundle and returns a `LumosRun`.
 
 Fail-fast validation runs before report generation. The bundle validates required input columns, temporal drift columns, performance inputs, and bias inputs before starting expensive report work. `monitoring_report()` currently requires `loaded_settings.bundles.fail_fast=True`.
 
+### `training_report(...)`
+
+```python
+training_report(
+    train,
+    holdout,
+    *,
+    target,
+    prediction=None,
+    prediction_score=None,
+    model=None,
+    feature_columns=None,
+    categorical_columns=None,
+    protected_attribute=None,
+    time_column=None,
+    sample_size=None,
+    include_profile=None,
+    include_performance=None,
+    include_bias=None,
+    include_feature_importance=None,
+    report_name=None,
+    experiment_name=None,
+    loaded_settings=settings,
+)
+```
+
+Builds the standard post-training bundle and returns a `LumosRun`.
+
+- Always builds `train_sample` from `train` with `role="train_benchmark"`.
+- Always builds `holdout_sample` from `holdout` with `role="holdout"`.
+- Runs profile as `profile` only when `include_profile=True`.
+- Runs performance as `performance` when `prediction` is provided, or when `include_performance=True`.
+- Runs bias as `bias` when `protected_attribute` is provided, or when `include_bias=True`.
+- Runs feature importance as `feature_importance` when `model` is provided and `include_feature_importance` is not `False`, unless `settings.bundles.include_feature_importance_in_training` disables the default.
+- Uses `sample_size` for train and holdout samples, and for profile temporal sampling when profile is enabled.
+- Uses `experiment_name`, or `loaded_settings.mlflow.default_experiment_name`, to log the whole bundle in one MLflow run.
+
+Fail-fast validation runs before report generation. The bundle validates required target, prediction, bias, and feature-importance inputs before starting expensive report work. `training_report()` currently requires `loaded_settings.bundles.fail_fast=True`.
+
 ## Model APIs
 
 ### `get_metrics(...)`
@@ -389,6 +428,8 @@ Import global settings:
 ```python
 from lumosai import settings
 ```
+
+The settings API is the package control point for repeated use. Put shared standards in environment variables once, such as MLflow destinations, artifact retention, sample sizes, metric thresholds, and bundle behavior, then keep individual report calls focused on the data and columns for that run.
 
 Relevant sample defaults live under `settings.data`:
 

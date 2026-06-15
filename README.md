@@ -11,6 +11,7 @@ It provides simple function-first APIs for profiling, drift, performance, and bi
 - [Development guide](docs/development.md)
 - [Data pipeline monitoring](docs/recipes/data-pipeline-monitoring.md)
 - [Training pipeline reporting](docs/recipes/training-pipeline-reporting.md)
+- [Tuning and final training](docs/recipes/tuning-and-final-training.md)
 - [Ongoing monitoring pipeline](docs/recipes/ongoing-monitoring-pipeline.md)
 - [Representative samples](docs/recipes/representative-samples.md)
 - [Feature importance](docs/recipes/feature-importance.md)

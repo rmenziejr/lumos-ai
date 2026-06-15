@@ -13,6 +13,7 @@ It provides helpers for dataset profiling, data drift, model performance, and bi
 
 - [Data pipeline monitoring](recipes/data-pipeline-monitoring.md)
 - [Training pipeline reporting](recipes/training-pipeline-reporting.md)
+- [Tuning and final training](recipes/tuning-and-final-training.md)
 - [Ongoing monitoring pipeline](recipes/ongoing-monitoring-pipeline.md)
 - [Representative samples](recipes/representative-samples.md)
 - [Feature importance](recipes/feature-importance.md)
@@ -23,5 +24,6 @@ It provides helpers for dataset profiling, data drift, model performance, and bi
 
 - Inputs can be pandas, Polars, or other Narwhals-compatible dataframe objects.
 - Report functions normalize dataframes internally and return `LumosResult`.
+- `lumosai.settings` acts as the shared control point for defaults, so teams can set standards once with `LUMOSAI_` environment variables instead of repeating the same arguments in every job.
 - Passing `experiment_name` enables MLflow logging and requires the optional MLflow dependency.
 - Omitting `experiment_name` keeps results local.

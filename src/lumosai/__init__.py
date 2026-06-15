@@ -18,6 +18,7 @@ __all__ = [
     "performance_report",
     "profile",
     "settings",
+    "training_report",
 ]
 
 
@@ -40,4 +41,8 @@ def __getattr__(name: str) -> Any:
         from lumosai.bundles import monitoring_report
 
         return monitoring_report
+    if name == "training_report":
+        from lumosai.bundles import training_report
+
+        return training_report
     raise AttributeError(f"module 'lumosai' has no attribute {name!r}")

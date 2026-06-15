@@ -48,3 +48,9 @@ def test_monitoring_report_public_api() -> None:
     from lumosai import monitoring_report
 
     assert callable(monitoring_report)
+
+
+def test_training_report_public_api() -> None:
+    from lumosai import training_report
+
+    assert callable(training_report)

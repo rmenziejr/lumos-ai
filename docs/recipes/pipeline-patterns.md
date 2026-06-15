@@ -4,6 +4,8 @@
 
 Use the low-level primitives directly while developing, debugging, testing, or building custom pipeline steps. They make each report boundary explicit and are easy to unit test. When the monitoring flow is stable enough for scheduled production runs, promote the same prepared inputs to `monitoring_report()` so sampling, drift, optional performance, optional bias, fail-fast validation, result grouping, and MLflow bundle logging happen consistently.
 
+Use `lumosai.settings` as the control point for standards that should stay consistent across those jobs. Environment variables such as `LUMOSAI_MLFLOW__DEFAULT_EXPERIMENT_NAME`, `LUMOSAI_DATA__DEFAULT_SAMPLE_SIZE`, and `LUMOSAI_BUNDLES__FAIL_FAST` reduce repetitive arguments while keeping pipeline code focused on prepared inputs.
+
 ## Data Pipeline
 
 Use data pipeline jobs to validate and profile the feature table that downstream training or scoring jobs will consume.

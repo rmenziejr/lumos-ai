@@ -7,13 +7,26 @@ import pandas as pd
 import pytest
 
 import lumosai.bundles as bundles
-from lumosai.bundles import monitoring_report
+from lumosai.bundles import monitoring_report, training_report
 from lumosai.exceptions import LumosValidationError
 from lumosai.results import LumosResult
 from lumosai.settings import Settings, settings
 
 
 def make_monitoring_frame() -> pd.DataFrame:
+    return pd.DataFrame(
+        {
+            "event_date": pd.date_range("2026-01-01", periods=6, freq="D"),
+            "amount": [10, 12, 14, 16, 18, 20],
+            "age": [30, 31, 32, 33, 34, 35],
+            "target": [0, 1, 0, 1, 0, 1],
+            "prediction": [0, 1, 0, 0, 0, 1],
+            "region": ["a", "a", "b", "b", "a", "b"],
+        }
+    )
+
+
+def make_training_frame() -> pd.DataFrame:
     return pd.DataFrame(
         {
             "event_date": pd.date_range("2026-01-01", periods=6, freq="D"),
@@ -33,6 +46,165 @@ def test_monitoring_report_requires_temporal_features_for_drift() -> None:
             benchmark=make_monitoring_frame(),
             feature_columns=["amount", "age"],
         )
+
+
+def test_training_report_runs_default_training_bundle(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    calls: list[tuple[str, dict[str, Any]]] = []
+
+    def fake_child_report(*_args: Any, **kwargs: Any) -> LumosResult:
+        report_type = kwargs.pop("_report_type")
+        calls.append((report_type, kwargs))
+        return LumosResult(
+            metrics={f"{report_type}/metric": 1.0},
+            metadata={"report_type": report_type},
+        )
+
+    monkeypatch.setattr(
+        bundles,
+        "build_sample",
+        lambda *_args, **kwargs: fake_child_report(
+            **kwargs,
+            _report_type=f"sample_{kwargs['role']}",
+        ),
+    )
+    monkeypatch.setattr(
+        bundles,
+        "performance_report",
+        lambda *_args, **kwargs: fake_child_report(**kwargs, _report_type="performance"),
+    )
+    monkeypatch.setattr(
+        bundles,
+        "feature_importance",
+        lambda *_args, **kwargs: fake_child_report(**kwargs, _report_type="feature_importance"),
+    )
+
+    result = training_report(
+        make_training_frame(),
+        make_training_frame(),
+        target="target",
+        prediction="prediction",
+        model=object(),
+        feature_columns=["amount", "age"],
+        sample_size=3,
+        report_name="training",
+    )
+
+    assert result.run_type == "training"
+    assert set(result.results) == {
+        "train_sample",
+        "holdout_sample",
+        "performance",
+        "feature_importance",
+    }
+    assert result.metadata["report_name"] == "training"
+    assert result.metadata["skipped_reports"]["profile"] == "include_profile not enabled"
+    assert [call[0] for call in calls] == [
+        "sample_train_benchmark",
+        "sample_holdout",
+        "performance",
+        "feature_importance",
+    ]
+    assert calls[0][1]["role"] == "train_benchmark"
+    assert calls[1][1]["role"] == "holdout"
+
+
+def test_training_report_runs_optional_profile_and_bias(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    called_report_types: list[str] = []
+
+    def fake_result(report_type: str) -> LumosResult:
+        called_report_types.append(report_type)
+        return LumosResult(
+            metrics={f"{report_type}/metric": 1.0},
+            metadata={"report_type": report_type},
+        )
+
+    monkeypatch.setattr(bundles, "build_sample", lambda *_args, **_kwargs: fake_result("sample"))
+    monkeypatch.setattr(bundles, "profile", lambda *_args, **_kwargs: fake_result("profile"))
+    monkeypatch.setattr(
+        bundles,
+        "performance_report",
+        lambda *_args, **_kwargs: fake_result("performance"),
+    )
+    monkeypatch.setattr(bundles, "bias_report", lambda *_args, **_kwargs: fake_result("bias"))
+
+    result = training_report(
+        make_training_frame(),
+        make_training_frame(),
+        target="target",
+        prediction="prediction",
+        protected_attribute="region",
+        feature_columns=["amount", "age"],
+        include_profile=True,
+        include_feature_importance=False,
+    )
+
+    assert set(result.results) == {
+        "train_sample",
+        "holdout_sample",
+        "profile",
+        "performance",
+        "bias",
+    }
+    assert called_report_types == ["sample", "sample", "profile", "performance", "bias"]
+
+
+def test_training_report_requires_prediction_when_performance_enabled() -> None:
+    with pytest.raises(LumosValidationError, match="prediction"):
+        training_report(
+            make_training_frame(),
+            make_training_frame(),
+            target="target",
+            include_performance=True,
+            feature_columns=["amount", "age"],
+        )
+
+
+def test_training_report_requires_model_when_feature_importance_enabled() -> None:
+    with pytest.raises(LumosValidationError, match="model"):
+        training_report(
+            make_training_frame(),
+            make_training_frame(),
+            target="target",
+            feature_columns=["amount", "age"],
+            include_feature_importance=True,
+        )
+
+
+def test_training_report_honors_feature_importance_setting(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    loaded = Settings()
+    loaded.bundles.include_feature_importance_in_training = False
+    called_report_types: list[str] = []
+
+    def fake_result(report_type: str) -> LumosResult:
+        called_report_types.append(report_type)
+        return LumosResult(
+            metrics={f"{report_type}/metric": 1.0},
+            metadata={"report_type": report_type},
+        )
+
+    monkeypatch.setattr(bundles, "build_sample", lambda *_args, **_kwargs: fake_result("sample"))
+
+    result = training_report(
+        make_training_frame(),
+        make_training_frame(),
+        target="target",
+        prediction="prediction",
+        model=object(),
+        feature_columns=["amount", "age"],
+        loaded_settings=loaded,
+    )
+
+    assert "feature_importance" not in result.results
+    assert (
+        result.metadata["skipped_reports"]["feature_importance"]
+        == "feature importance disabled by settings"
+    )
 
 
 def test_monitoring_report_requires_prediction_when_performance_enabled() -> None:
