@@ -14,6 +14,7 @@ It provides helpers for dataset profiling, data drift, model performance, and bi
 - [Data pipeline monitoring](recipes/data-pipeline-monitoring.md)
 - [Training pipeline reporting](recipes/training-pipeline-reporting.md)
 - [Tuning and final training](recipes/tuning-and-final-training.md)
+- [Full Pima walkthrough](recipes/full-pima-walkthrough.md)
 - [Ongoing monitoring pipeline](recipes/ongoing-monitoring-pipeline.md)
 - [Representative samples](recipes/representative-samples.md)
 - [Feature importance](recipes/feature-importance.md)

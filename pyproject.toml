@@ -12,6 +12,7 @@ dependencies = [
   "pydantic>=2.7",
   "pydantic-settings>=2.2",
   "scikit-learn>=1.4",
+  "setuptools>=70,<81",
   "ydata-profiling>=4.8",
 ]
 

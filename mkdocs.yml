@@ -1,6 +1,6 @@
 site_name: lumosai
 site_description: Opinionated ML monitoring and reporting helpers.
-repo_url: https://github.com/rmenzie/lumos-ai
+repo_url: https://github.com/rmenziejr/lumos-ai
 theme:
   name: material
   features:
@@ -15,6 +15,7 @@ nav:
       - Data Pipeline Monitoring: recipes/data-pipeline-monitoring.md
       - Training Pipeline Reporting: recipes/training-pipeline-reporting.md
       - Tuning and Final Training: recipes/tuning-and-final-training.md
+      - Full Pima Walkthrough: recipes/full-pima-walkthrough.md
       - Ongoing Monitoring Pipeline: recipes/ongoing-monitoring-pipeline.md
       - Monitoring Bundle: recipes/monitoring-bundle.md
       - Representative Samples: recipes/representative-samples.md

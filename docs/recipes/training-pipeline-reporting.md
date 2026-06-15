@@ -5,6 +5,7 @@ Install `lumosai[mlflow]` before passing `experiment_name` or setting `LUMOSAI_M
 To keep the reports in one MLflow run, start the run before calling `lumosai`.
 When a scheduled training job should run the standard sample, performance, bias, and importance checks together, use `training_report()`.
 For Optuna tuning runs, nested MLflow trials, fold-level evaluation, and final model diagnostics, see [Tuning and Final Training](tuning-and-final-training.md).
+For a runnable end-to-end notebook using the Pima Indians Diabetes dataset, see [Full Pima Walkthrough](full-pima-walkthrough.md).
 
 ```python
 import mlflow
