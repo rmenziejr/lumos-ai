@@ -1,13 +1,21 @@
 from __future__ import annotations
 
+from pathlib import Path
 from typing import Any, Literal
 
 import numpy as np
 
+from lumosai.artifacts import (
+    artifact_workspace,
+    html_artifact_metadata,
+    log_result_with_html_artifact,
+    should_keep_html_artifact,
+)
 from lumosai.data.ingest import to_pandas
 from lumosai.data.validation import require_columns
 from lumosai.exceptions import LumosValidationError
 from lumosai.mlflow import log_result
+from lumosai.model.plots import calibration_html
 from lumosai.model.scores import (
     ClassificationScores,
     ScoreInput,
@@ -104,6 +112,7 @@ def calibration_report(
     n_bins: int = 10,
     strategy: Literal["uniform"] = "uniform",
     report_name: str | None = None,
+    include_plots: bool = True,
     experiment_name: str | None = None,
 ) -> LumosResult:
     """Evaluate probability calibration by class using uniform bins.
@@ -169,15 +178,46 @@ def calibration_report(
     if report_name is not None:
         metadata["report_name"] = report_name
 
+    summary = {
+        "calibration": {
+            "strategy": strategy,
+            "n_bins": n_bins,
+            "classes": class_summaries,
+        }
+    }
+    artifacts: dict[str, Any] = {}
+    html_path: Path | None = None
+    if include_plots:
+        title = report_name or "Calibration Report"
+        keep_local = should_keep_html_artifact(experiment_name=experiment_name)
+        with artifact_workspace(keep_local=keep_local) as workspace:
+            html_path = workspace / "calibration_report.html"
+            html_path.write_text(
+                calibration_html(title=title, calibration_summary=summary["calibration"]),
+                encoding="utf-8",
+            )
+            artifacts, _ = html_artifact_metadata(
+                html_path,
+                artifact_path="calibration",
+                experiment_name=experiment_name,
+            )
+            result = LumosResult(
+                metrics=metrics,
+                summary=summary,
+                artifacts=artifacts,
+                metadata=metadata,
+            )
+            return log_result_with_html_artifact(
+                result,
+                html_path=html_path,
+                artifact_path="calibration",
+                experiment_name=experiment_name,
+            )
+
     result = LumosResult(
         metrics=metrics,
-        summary={
-            "calibration": {
-                "strategy": strategy,
-                "n_bins": n_bins,
-                "classes": class_summaries,
-            }
-        },
+        summary=summary,
+        artifacts=artifacts,
         metadata=metadata,
     )
     log_result(result, experiment_name=experiment_name)

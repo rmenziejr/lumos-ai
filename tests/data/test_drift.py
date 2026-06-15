@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+from pathlib import Path
 from typing import Any
 
 import pandas as pd
@@ -16,7 +17,9 @@ def test_safe_comparison_name_normalizes_metric_path_component() -> None:
 
 def test_drift_report_returns_namespaced_metrics_without_evidently(
     monkeypatch: pytest.MonkeyPatch,
+    tmp_path: Path,
 ) -> None:
+    monkeypatch.setattr(settings.artifacts, "local_dir", tmp_path)
     reference = pd.DataFrame({"event_date": ["2026-01-01"], "x": [1.0]})
     current = pd.DataFrame({"event_date": ["2026-01-02"], "x": [10.0]})
 
@@ -67,6 +70,11 @@ def test_drift_report_returns_namespaced_metrics_without_evidently(
             "threshold": 0.1,
         }
     ]
+    html_path = Path(result.artifacts["html"])
+    html = html_path.read_text(encoding="utf-8")
+    assert html_path.exists()
+    assert "Data Drift Report" in html
+    assert "previous_window" in html
 
 
 def test_drift_report_excludes_temporal_features(monkeypatch: pytest.MonkeyPatch) -> None:

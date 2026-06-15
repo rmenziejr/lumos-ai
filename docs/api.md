@@ -149,6 +149,7 @@ drift_report(
     comparison="benchmark",
     report_name=None,
     evidently_kwargs=None,
+    include_html=True,
     experiment_name=None,
 )
 ```
@@ -160,6 +161,7 @@ Runs an Evidently data drift report.
 - Treats `categorical_columns` as semantic categorical overrides where the installed Evidently API supports it.
 - Namespaces metrics under `drift/<comparison>/...`.
 - Flags when drift share exceeds `settings.data.drift_share_threshold`.
+- Exports `result.artifacts["html"]` by default. With no MLflow experiment configured, the HTML file is retained locally; with MLflow artifact logging enabled, the result stores the MLflow artifact path.
 - Supports current Evidently APIs and legacy report payloads.
 
 Supported `evidently_kwargs`:
@@ -322,6 +324,7 @@ performance_report(
     report_name=None,
     feature_columns=None,
     categorical_columns=None,
+    include_plots=True,
     experiment_name=None,
 )
 ```
@@ -335,6 +338,7 @@ Computes current-window model performance.
 - When multiclass array scores omit `score_labels`, labels are inferred by sorting observed target/prediction labels and warning metadata is recorded.
 - Classification reports include log loss when probability-like scores are supplied.
 - Pass `include_lift=True` to add decile lift metrics under `performance/lift/<class>/...`.
+- Exports `result.artifacts["html"]` by default with common diagnostics: confusion matrix, ROC, PR, and lift plots for scored classification reports; predicted-vs-actual and residual plots for regression reports.
 - Returns namespaced metrics under `performance/...`.
 - Stores `feature_columns` and `categorical_columns` in metadata when provided.
 
@@ -350,6 +354,7 @@ calibration_report(
     n_bins=10,
     strategy="uniform",
     report_name=None,
+    include_plots=True,
     experiment_name=None,
 )
 ```
@@ -364,6 +369,7 @@ Computes probability calibration for classification models.
 - Returns Brier score and expected calibration error metrics under `calibration/<class>/...`.
 - Returns macro calibration metrics under `calibration/macro_brier` and `calibration/macro_ece`.
 - Stores bin tables in `result.summary["calibration"]`.
+- Exports `result.artifacts["html"]` by default with calibration curve plots.
 - Uses `report_name` in result metadata and MLflow logging when provided.
 
 ### `bias_report(...)`

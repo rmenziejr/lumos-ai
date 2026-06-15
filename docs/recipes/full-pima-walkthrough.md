@@ -5,18 +5,19 @@ complete local `lumosai` workflow:
 
 - raw and preprocessed data profiling;
 - representative train and holdout samples;
-- holdout performance with probability scores and lift;
-- calibration metrics before and after probability calibration;
+- holdout performance with probability scores, lift, ROC, PR, and confusion plots;
+- calibration metrics and plots before and after probability calibration;
 - bias slices by derived age group;
-- benchmark and previous-window drift;
+- benchmark and previous-window drift HTML;
 - training and monitoring bundles.
 
 Open the notebook in GitHub:
 
 [Pima diabetes monitoring walkthrough](https://github.com/rmenziejr/lumos-ai/blob/main/examples/notebooks/pima_diabetes_walkthrough.ipynb)
 
-The notebook is committed with executed output examples, including embedded HTML
-profile output where notebook viewers support rich HTML.
+The notebook is committed with executed output examples, including package-generated
+HTML report artifacts displayed inside the notebook where notebook viewers support
+rich HTML.
 
 The source CSV is checked into the repo at
 [`examples/data/diabetes.csv`](https://github.com/rmenziejr/lumos-ai/blob/main/examples/data/diabetes.csv)

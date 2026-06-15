@@ -1,10 +1,13 @@
 from __future__ import annotations
 
+from pathlib import Path
+
 import pandas as pd
 import pytest
 
 from lumosai.exceptions import LumosValidationError
 from lumosai.model.calibration import calibration_report
+from lumosai.settings import settings
 
 
 def test_calibration_report_binary_returns_brier_ece_and_bins() -> None:
@@ -34,6 +37,35 @@ def test_calibration_report_binary_returns_brier_ece_and_bins() -> None:
     assert result.metadata["positive_label"] == 1
     assert result.metadata["score_source"] == "column"
     assert len(result.summary["calibration"]["classes"]["positive"]) == 2
+
+
+def test_calibration_report_creates_default_html_artifact(
+    monkeypatch: pytest.MonkeyPatch,
+    tmp_path: Path,
+) -> None:
+    monkeypatch.setattr(settings.artifacts, "local_dir", tmp_path)
+    df = pd.DataFrame(
+        {
+            "actual": [0, 0, 1, 1],
+            "score": [0.1, 0.4, 0.8, 0.9],
+        }
+    )
+
+    result = calibration_report(
+        df,
+        target="actual",
+        prediction_score="score",
+        score_labels=[0, 1],
+        n_bins=2,
+        report_name="Post Calibration",
+    )
+
+    html_path = Path(result.artifacts["html"])
+    html = html_path.read_text(encoding="utf-8")
+    assert html_path.exists()
+    assert "Post Calibration" in html
+    assert "Calibration Curve" in html
+    assert "Observed Rate" in html
 
 
 def test_calibration_report_binary_infers_positive_label() -> None:
@@ -210,6 +242,7 @@ def test_calibration_report_logs_mlflow_result(monkeypatch: pytest.MonkeyPatch) 
         df,
         target="actual",
         prediction_score="score",
+        include_plots=False,
         experiment_name="training",
     )
 

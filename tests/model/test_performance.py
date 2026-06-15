@@ -1,5 +1,7 @@
 from __future__ import annotations
 
+from pathlib import Path
+
 import numpy as np
 import pandas as pd
 import pytest
@@ -8,6 +10,7 @@ import lumosai.mlflow as mlflow_adapter
 from lumosai.exceptions import LumosOptionalDependencyError, LumosValidationError
 from lumosai.model.performance import performance_report
 from lumosai.results import LumosResult
+from lumosai.settings import settings
 
 
 def test_performance_report_returns_namespaced_metrics() -> None:
@@ -32,6 +35,65 @@ def test_performance_report_returns_namespaced_metrics() -> None:
     assert result.metrics["performance/roc_auc"] == 1.0
     assert result.metadata["report_type"] == "performance"
     assert result.metadata["task_type"] == "classification"
+
+
+def test_performance_report_creates_default_classification_html_artifact(
+    monkeypatch: pytest.MonkeyPatch,
+    tmp_path: Path,
+) -> None:
+    monkeypatch.setattr(settings.artifacts, "local_dir", tmp_path)
+    frame = pd.DataFrame(
+        {
+            "actual": [0, 1, 1, 0, 1, 0],
+            "prediction": [0, 1, 1, 0, 0, 0],
+            "prediction_score": [0.1, 0.9, 0.8, 0.2, 0.45, 0.3],
+        }
+    )
+
+    result = performance_report(
+        frame,
+        target="actual",
+        prediction="prediction",
+        prediction_score="prediction_score",
+        task_type="classification",
+        report_name="Holdout Performance",
+    )
+
+    html_path = Path(result.artifacts["html"])
+    html = html_path.read_text(encoding="utf-8")
+    assert html_path.exists()
+    assert "Holdout Performance" in html
+    assert "ROC Curve" in html
+    assert "Precision-Recall Curve" in html
+    assert "Lift by Decile" in html
+    assert "Confusion Matrix" in html
+
+
+def test_performance_report_creates_default_regression_html_artifact(
+    monkeypatch: pytest.MonkeyPatch,
+    tmp_path: Path,
+) -> None:
+    monkeypatch.setattr(settings.artifacts, "local_dir", tmp_path)
+    frame = pd.DataFrame(
+        {
+            "actual": [1.0, 2.0, 3.0, 4.0],
+            "prediction": [1.1, 1.9, 3.2, 3.7],
+        }
+    )
+
+    result = performance_report(
+        frame,
+        target="actual",
+        prediction="prediction",
+        task_type="regression",
+        report_name="Holdout Regression",
+    )
+
+    html = Path(result.artifacts["html"]).read_text(encoding="utf-8")
+    assert "Holdout Regression" in html
+    assert "Predicted vs Actual" in html
+    assert "Residuals vs Prediction" in html
+    assert "Residual Distribution" in html
 
 
 def test_performance_report_handles_multiclass_score_vectors() -> None:

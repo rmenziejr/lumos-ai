@@ -5,10 +5,17 @@ from __future__ import annotations
 import re
 from collections.abc import Mapping
 from inspect import signature
+from pathlib import Path
 from typing import Any
 
 import pandas as pd
 
+from lumosai.artifacts import (
+    artifact_workspace,
+    html_artifact_metadata,
+    log_result_with_html_artifact,
+    should_keep_html_artifact,
+)
 from lumosai.data.ingest import to_pandas
 from lumosai.data.validation import (
     require_columns,
@@ -17,6 +24,7 @@ from lumosai.data.validation import (
 )
 from lumosai.exceptions import LumosOptionalDependencyError, LumosValidationError
 from lumosai.mlflow import log_result
+from lumosai.model.plots import drift_fallback_html
 from lumosai.results import LumosResult
 from lumosai.schema import filter_supported_kwargs, validate_categorical_columns
 from lumosai.settings import settings
@@ -244,6 +252,59 @@ def _run_report(
     return report.run(**kwargs)
 
 
+def _write_drift_html(
+    *,
+    report: Any,
+    run_result: Any,
+    html_path: Path,
+    title: str,
+    summary: dict[str, Any],
+    metadata: dict[str, Any],
+) -> None:
+    export_errors: list[str] = []
+    for source in (run_result, report):
+        if source is None:
+            continue
+        for method_name in ("save_html", "save"):
+            method = getattr(source, method_name, None)
+            if method is None:
+                continue
+            try:
+                method(html_path)
+                if html_path.exists():
+                    return
+            except TypeError as exc:
+                export_errors.append(str(exc))
+                try:
+                    method(str(html_path))
+                    if html_path.exists():
+                        return
+                except Exception as str_exc:
+                    export_errors.append(str(str_exc))
+            except Exception as exc:
+                export_errors.append(str(exc))
+        for method_name in ("as_html", "to_html", "html"):
+            method = getattr(source, method_name, None)
+            if method is None:
+                continue
+            try:
+                rendered = method()
+            except Exception as exc:
+                export_errors.append(str(exc))
+                rendered = None
+            if isinstance(rendered, str):
+                html_path.write_text(rendered, encoding="utf-8")
+                return
+
+    fallback_metadata = dict(metadata)
+    if export_errors:
+        fallback_metadata["native_html_export_errors"] = len(export_errors)
+    html_path.write_text(
+        drift_fallback_html(title=title, summary=summary, metadata=fallback_metadata),
+        encoding="utf-8",
+    )
+
+
 def drift_report(
     reference: Any,
     current: Any,
@@ -254,6 +315,7 @@ def drift_report(
     comparison: str = "benchmark",
     report_name: str | None = None,
     evidently_kwargs: dict[str, Any] | None = None,
+    include_html: bool = True,
     experiment_name: str | None = None,
 ) -> LumosResult:
     """Compare reference and current frames for feature drift.
@@ -342,22 +404,59 @@ def drift_report(
             }
         )
 
+    metadata = {
+        "report_type": "drift",
+        "comparison": safe_comparison,
+        **({"report_name": report_name} if report_name is not None else {}),
+        **({"feature_columns": list(feature_columns)} if feature_columns is not None else {}),
+        **(
+            {"categorical_columns": selected_categorical_columns}
+            if selected_categorical_columns
+            else {}
+        ),
+    }
+    artifacts: dict[str, Any] = {}
+    html_path: Path | None = None
+    if include_html:
+        title = report_name or "Data Drift Report"
+        keep_local = should_keep_html_artifact(experiment_name=experiment_name)
+        with artifact_workspace(keep_local=keep_local) as workspace:
+            html_path = workspace / "drift_report.html"
+            _write_drift_html(
+                report=report,
+                run_result=run_result,
+                html_path=html_path,
+                title=title,
+                summary=summary,
+                metadata=metadata,
+            )
+            artifacts, _ = html_artifact_metadata(
+                html_path,
+                artifact_path="drift",
+                experiment_name=experiment_name,
+            )
+            result = LumosResult(
+                metrics=metrics,
+                summary=summary,
+                flagged=flagged,
+                artifacts=artifacts,
+                report=report,
+                metadata=metadata,
+            )
+            return log_result_with_html_artifact(
+                result,
+                html_path=html_path,
+                artifact_path="drift",
+                experiment_name=experiment_name,
+            )
+
     result = LumosResult(
         metrics=metrics,
         summary=summary,
         flagged=flagged,
+        artifacts=artifacts,
         report=report,
-        metadata={
-            "report_type": "drift",
-            "comparison": safe_comparison,
-            **({"report_name": report_name} if report_name is not None else {}),
-            **({"feature_columns": list(feature_columns)} if feature_columns is not None else {}),
-            **(
-                {"categorical_columns": selected_categorical_columns}
-                if selected_categorical_columns
-                else {}
-            ),
-        },
+        metadata=metadata,
     )
     log_result(result, experiment_name=experiment_name)
     return result
