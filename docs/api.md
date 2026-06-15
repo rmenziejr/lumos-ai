@@ -73,6 +73,7 @@ Generates a ydata-profiling report.
 - Profiles only `target + feature_columns` when `feature_columns` is provided.
 - Moves `target` to the first profiled column when provided.
 - Returns an HTML artifact when analysis logging is enabled.
+- `log_analysis=False` disables profile artifact generation and MLflow logging for that call, even when an experiment is configured.
 
 Supported `ydata_kwargs`:
 
@@ -132,7 +133,7 @@ Builds a bounded representative sample for training benchmarks, holdouts, or mon
 - Adds sample role, strategy, row counts, columns, schema summary, digest, categorical columns, and optional time range to metadata/summary.
 - Writes a local artifact when `artifact_path` is provided.
 - An explicit `artifact_path` suffix controls the format; suffixless paths use `settings.data.sample_artifact_format`.
-- When `experiment_name` is provided, `log_metadata=None` defers to `settings.data.log_sample_metadata`, which defaults to `True`.
+- When `experiment_name` is provided, or `settings.mlflow.default_experiment_name` is configured, `log_metadata=None` defers to `settings.data.log_sample_metadata`, which defaults to `True`.
 - Raw sample artifact logging is opt-in: `log_artifact=None` defers to `settings.data.log_sample_artifacts`, which defaults to `False`; pass `log_artifact=True` to log the raw artifact for that call.
 
 ### `drift_report(...)`

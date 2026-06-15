@@ -2,7 +2,8 @@
 
 Run `profile()` after feature table creation to inspect the produced dataset.
 Run `drift_report()` against a stable benchmark when a new feature table or production extract is available.
-Install `lumosai[mlflow]` before passing `experiment_name`; omit `experiment_name` for local-only results.
+Install `lumosai[mlflow]` before passing `experiment_name` or setting `LUMOSAI_MLFLOW__DEFAULT_EXPERIMENT_NAME`. Results stay local only when neither is configured.
+For a profile dry run inside a logging-enabled environment, pass `log_analysis=False` to skip profile artifact generation and MLflow logging for that call.
 
 ```python
 from lumosai.data import drift_report, profile

@@ -2,7 +2,7 @@
 
 Representative samples are bounded dataframes for profiling, drift, performance, and audit workflows. They give later reports a stable, documented slice of a larger training, holdout, or production window without making `lumosai` responsible for upstream storage.
 
-Raw samples are not sent to MLflow by default. When `experiment_name` is provided, `build_sample()` logs sample metadata by default and logs the raw sample artifact only when enabled by settings or `log_artifact=True`.
+Raw samples are not sent to MLflow by default. When `experiment_name` is provided, or `settings.mlflow.default_experiment_name` is configured, `build_sample()` logs sample metadata by default and logs the raw sample artifact only when enabled by settings or `log_artifact=True`.
 
 ## Training Benchmark
 

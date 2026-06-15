@@ -56,6 +56,8 @@ class LumosRun:
 
     @property
     def metrics(self) -> dict[str, float]:
+        """Return child result metrics merged into one dictionary."""
+
         merged: dict[str, float] = {}
         for result in self.results.values():
             merged.update(result.metrics)
@@ -63,6 +65,8 @@ class LumosRun:
 
     @property
     def flagged(self) -> list[dict[str, Any]]:
+        """Return flagged child findings annotated with their result key."""
+
         findings: list[dict[str, Any]] = []
         for key, result in self.results.items():
             for item in result.flagged:
@@ -70,6 +74,8 @@ class LumosRun:
         return findings
 
     def to_dict(self) -> dict[str, Any]:
+        """Return a JSON-safe representation of the grouped run."""
+
         return {
             "run_type": self.run_type,
             "metrics": self.metrics,

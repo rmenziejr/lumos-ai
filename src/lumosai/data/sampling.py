@@ -251,6 +251,14 @@ def build_sample(
     log_metadata: bool | None = None,
     log_artifact: bool | None = None,
 ) -> LumosResult:
+    """Build a representative dataset sample with metadata and optional logging.
+
+    MLflow logging is enabled when `experiment_name` is provided or
+    `settings.mlflow.default_experiment_name` is set. Sample metadata logs by
+    default when MLflow is enabled; raw sample artifacts require explicit opt-in
+    through settings or `log_artifact=True`.
+    """
+
     frame = to_pandas(data)
     if role not in {"train_benchmark", "holdout", "monitoring_window"}:
         msg = "role must be one of: train_benchmark, holdout, monitoring_window"

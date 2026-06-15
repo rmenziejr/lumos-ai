@@ -3,7 +3,7 @@
 `lumosai` evaluates the frames passed to it. It does not schedule jobs, build monitoring windows, join late labels, or own orchestration.
 
 For each production window, run data drift. Run performance when labels are available. Run bias when labels and permitted protected attributes are available.
-Install `lumosai[mlflow]` before passing `experiment_name`; omit `experiment_name` for local-only results.
+Install `lumosai[mlflow]` before passing `experiment_name` or setting `LUMOSAI_MLFLOW__DEFAULT_EXPERIMENT_NAME`. Results stay local only when neither is configured.
 To keep a scheduled execution in one MLflow run, start the run before calling `lumosai`.
 
 ```python

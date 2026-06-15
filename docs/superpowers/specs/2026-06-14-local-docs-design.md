@@ -24,4 +24,4 @@ Add plain Markdown documentation that can later be migrated to MkDocs or GitHub 
 
 ## Design Notes
 
-The docs should describe current implemented behavior, including optional MLflow usage and the fact that callers can omit `experiment_name` for local-only results. The API reference should stay concise and avoid duplicating every test case.
+The docs should describe current implemented behavior, including optional MLflow usage and the fact that results stay local only when neither `experiment_name` nor `settings.mlflow.default_experiment_name` is configured. The API reference should stay concise and avoid duplicating every test case.

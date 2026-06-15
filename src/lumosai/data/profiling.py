@@ -46,6 +46,8 @@ def temporal_sample(
     sample_size: int = 1000,
     min_per_period: int = 1,
 ) -> pd.DataFrame:
+    """Sample rows from each time bucket while preserving temporal coverage."""
+
     require_columns(df, [time_column])
     if sample_size < 1:
         msg = "sample_size must be greater than zero"
@@ -107,6 +109,15 @@ def profile(
     ydata_kwargs: dict[str, Any] | None = None,
     experiment_name: str | None = None,
 ) -> LumosResult:
+    """Create a ydata-profiling report and return a structured result.
+
+    MLflow logging is enabled when `experiment_name` is provided or
+    `settings.mlflow.default_experiment_name` is set. Passing
+    `log_analysis=False` disables profile artifact generation and MLflow logging
+    for this call. With no experiment configured, generated artifacts are
+    retained locally according to artifact settings.
+    """
+
     frame = to_pandas(df)
     analysis_frame = select_analysis_frame(
         frame,
@@ -198,4 +209,5 @@ def profile(
         report=report,
         metadata=metadata,
     )
-    return _log_profile_result(result, html_path=None, experiment_name=experiment_name)
+    result.metadata["logged_to_mlflow"] = False
+    return result

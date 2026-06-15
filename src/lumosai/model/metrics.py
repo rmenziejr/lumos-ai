@@ -26,6 +26,8 @@ def detect_task_type(
     y_true: Sequence[Any] | pd.Series,
     y_pred: Sequence[Any] | pd.Series,
 ) -> TaskType:
+    """Infer whether observed and predicted values look categorical or numeric."""
+
     y_true_series = pd.Series(y_true)
     y_pred_series = pd.Series(y_pred)
     combined = pd.concat([y_true_series, y_pred_series], ignore_index=True).dropna()
@@ -44,6 +46,8 @@ def get_metrics(
     task_type: TaskType | None = None,
     custom_metrics: list[tuple[str, Callable[..., float]]] | None = None,
 ) -> dict[str, float]:
+    """Compute standard classification or regression metrics."""
+
     resolved_task = task_type or detect_task_type(y_true, y_pred)
     metrics: dict[str, float] = {}
 

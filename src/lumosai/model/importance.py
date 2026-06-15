@@ -78,6 +78,12 @@ def feature_importance(
     report_name: str | None = None,
     experiment_name: str | None = None,
 ) -> LumosResult:
+    """Compute permutation or SHAP feature importance for a fitted model.
+
+    MLflow logging is enabled when `experiment_name` is provided or
+    `settings.mlflow.default_experiment_name` is set.
+    """
+
     frame = to_pandas(data)
     if not feature_columns:
         msg = "feature_columns must contain at least one feature"

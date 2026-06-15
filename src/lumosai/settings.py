@@ -8,11 +8,15 @@ from pydantic_settings import BaseSettings, SettingsConfigDict
 
 
 class ArtifactSettings(BaseModel):
+    """Artifact retention defaults for reports that create local files."""
+
     keep_local: bool = False
     local_dir: Path | None = None
 
 
 class MLflowSettings(BaseModel):
+    """MLflow connection and logging defaults shared by report functions."""
+
     tracking_uri: str | None = None
     username: str | None = None
     password: str | None = None
@@ -23,6 +27,8 @@ class MLflowSettings(BaseModel):
 
 
 class DataSettings(BaseModel):
+    """Data report defaults for drift, profiling, and representative samples."""
+
     drift_share_threshold: float = Field(default=0.1, ge=0.0, le=1.0)
     profile_minimal_default: bool = True
     log_analysis: bool = True
@@ -33,12 +39,16 @@ class DataSettings(BaseModel):
 
 
 class MetricThreshold(BaseModel):
+    """Threshold definition used by model and bias comparisons."""
+
     mode: Literal["relative", "absolute"] = "relative"
     value: float
     greater_is_better: bool = True
 
 
 def default_metric_thresholds() -> dict[str, MetricThreshold]:
+    """Return default metric thresholds for model quality comparisons."""
+
     return {
         "precision": MetricThreshold(mode="relative", value=0.8, greater_is_better=True),
         "recall": MetricThreshold(mode="relative", value=0.8, greater_is_better=True),
@@ -54,6 +64,8 @@ def default_metric_thresholds() -> dict[str, MetricThreshold]:
 
 
 class ModelSettings(BaseModel):
+    """Model report defaults for metrics, thresholds, and importance."""
+
     classification_metrics: list[str] = Field(
         default_factory=lambda: ["accuracy", "precision", "recall", "f1"]
     )
@@ -89,6 +101,8 @@ class ModelSettings(BaseModel):
 
 
 class BundleSettings(BaseModel):
+    """Bundle defaults that control grouped training and monitoring reports."""
+
     include_profile_in_training: bool = False
     include_feature_importance_in_training: bool = True
     include_previous_window_drift: bool = True
@@ -96,6 +110,8 @@ class BundleSettings(BaseModel):
 
 
 class Settings(BaseSettings):
+    """Global lumosai settings loaded from `LUMOSAI_` environment variables."""
+
     model_config = SettingsConfigDict(
         env_prefix="LUMOSAI_",
         env_nested_delimiter="__",

@@ -29,6 +29,12 @@ def performance_report(
     categorical_columns: list[str] | None = None,
     experiment_name: str | None = None,
 ) -> LumosResult:
+    """Evaluate model predictions and return namespaced performance metrics.
+
+    MLflow logging is enabled when `experiment_name` is provided or
+    `settings.mlflow.default_experiment_name` is set.
+    """
+
     current_pd = to_pandas(current)
     validate_prediction_frame(
         current_pd,

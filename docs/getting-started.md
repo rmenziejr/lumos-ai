@@ -28,6 +28,8 @@ print(result.artifacts)
 `profile()` creates a ydata-profiling report. Without MLflow logging, the HTML artifact is kept locally according to artifact settings.
 Use `target` and `feature_columns` to focus the report and move the outcome column to the first position.
 
+For a profile dry run, pass `log_analysis=False`. This skips profile artifact generation and MLflow logging for the call, even when a default MLflow experiment is configured.
+
 ```python
 profile(
     feature_table,
@@ -36,6 +38,10 @@ profile(
     categorical_columns=["plan", "day_of_week"],
     report_name="Training Feature Profile",
 )
+```
+
+```python
+profile(feature_table, time_column="event_date", log_analysis=False)
 ```
 
 ## Check Data Drift
@@ -157,5 +163,7 @@ performance_report(
     experiment_name="model-monitoring",
 )
 ```
+
+You can also set `settings.mlflow.default_experiment_name` with `LUMOSAI_MLFLOW__DEFAULT_EXPERIMENT_NAME` so repeated report calls log without passing `experiment_name` each time. Results stay local only when both the function argument and default setting are absent.
 
 When no MLflow run is active, each report call creates its own run. Start an MLflow run around multiple calls when they should belong to the same scheduled execution.

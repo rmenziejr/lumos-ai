@@ -225,6 +225,14 @@ def monitoring_report(
     experiment_name: str | None = None,
     loaded_settings: Settings = settings,
 ) -> LumosRun:
+    """Run the standard monitoring bundle and return grouped child results.
+
+    The bundle opens one MLflow run when `experiment_name` is provided or
+    `loaded_settings.mlflow.default_experiment_name` is set. Child report
+    dictionary artifacts are suppressed so the bundle logs one combined run
+    artifact.
+    """
+
     if not loaded_settings.bundles.fail_fast:
         msg = "monitoring_report currently requires fail_fast=True"
         raise LumosValidationError(msg)
@@ -373,6 +381,14 @@ def training_report(
     experiment_name: str | None = None,
     loaded_settings: Settings = settings,
 ) -> LumosRun:
+    """Run the standard post-training bundle and return grouped child results.
+
+    The bundle opens one MLflow run when `experiment_name` is provided or
+    `loaded_settings.mlflow.default_experiment_name` is set. Child report
+    dictionary artifacts are suppressed so the bundle logs one combined run
+    artifact.
+    """
+
     if not loaded_settings.bundles.fail_fast:
         msg = "training_report currently requires fail_fast=True"
         raise LumosValidationError(msg)

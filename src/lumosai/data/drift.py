@@ -256,6 +256,13 @@ def drift_report(
     evidently_kwargs: dict[str, Any] | None = None,
     experiment_name: str | None = None,
 ) -> LumosResult:
+    """Compare reference and current frames for feature drift.
+
+    Temporal features are validated and excluded from drift calculations.
+    MLflow logging is enabled when `experiment_name` is provided or
+    `settings.mlflow.default_experiment_name` is set.
+    """
+
     reference_pd = to_pandas(reference)
     current_pd = to_pandas(current)
     require_no_duplicate_columns(reference_pd)

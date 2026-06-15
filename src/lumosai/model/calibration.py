@@ -106,6 +106,12 @@ def calibration_report(
     report_name: str | None = None,
     experiment_name: str | None = None,
 ) -> LumosResult:
+    """Evaluate probability calibration by class using uniform bins.
+
+    MLflow logging is enabled when `experiment_name` is provided or
+    `settings.mlflow.default_experiment_name` is set.
+    """
+
     if n_bins < 2:
         msg = "n_bins must be at least 2"
         raise LumosValidationError(msg)

@@ -249,6 +249,54 @@ def test_profile_logs_mlflow_artifact_and_result_in_same_run(
     assert result.artifacts["html"] == {"mlflow_artifact_path": "profile/profile.html"}
 
 
+def test_profile_log_analysis_false_disables_mlflow_logging(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    frame = pd.DataFrame({"value": [1, 2, 3]})
+    started_runs: list[str] = []
+
+    class FakeRun:
+        def __enter__(self) -> object:
+            started_runs.append("run-1")
+            return type("Run", (), {"info": type("Info", (), {"run_id": "run-1"})()})()
+
+        def __exit__(self, exc_type: object, exc: object, traceback: object) -> None:
+            return None
+
+    class FakeMlflow:
+        def set_experiment(self, experiment_name: str) -> None:
+            self.experiment_name = experiment_name
+
+        def active_run(self) -> object | None:
+            return None
+
+        def start_run(self) -> FakeRun:
+            return FakeRun()
+
+        def log_dict(self, payload: dict[str, Any], artifact_file: str) -> None:
+            raise AssertionError("log_analysis=False should not log profile results")
+
+        def log_artifact(self, local_path: str, artifact_path: str | None = None) -> None:
+            raise AssertionError("log_analysis=False should not log profile artifacts")
+
+    class FakeProfileReport:
+        def __init__(self, df: pd.DataFrame, minimal: bool) -> None:
+            self.df = df
+            self.minimal = minimal
+
+        def to_file(self, output_file: Path) -> None:
+            raise AssertionError("log_analysis=False should not write profile artifacts")
+
+    monkeypatch.setattr("lumosai.data.profiling.ProfileReport", FakeProfileReport)
+    monkeypatch.setattr("lumosai.mlflow.require_mlflow", lambda: FakeMlflow())
+
+    result = profile(frame, experiment_name="experiment", log_analysis=False)
+
+    assert started_runs == []
+    assert result.metadata["logged_to_mlflow"] is False
+    assert "html" not in result.artifacts
+
+
 def test_profile_keeps_local_artifact_when_mlflow_artifacts_disabled(
     monkeypatch: pytest.MonkeyPatch,
     tmp_path: Path,
