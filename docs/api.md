@@ -349,6 +349,39 @@ Computes current-window model performance.
 - Returns namespaced metrics under `performance/...`.
 - Stores `feature_columns` and `categorical_columns` in metadata when provided.
 
+### `performance_drift_report(...)`
+
+```python
+performance_drift_report(
+    baseline,
+    current,
+    *,
+    target=None,
+    prediction=None,
+    prediction_score=None,
+    score_labels=None,
+    task_type=None,
+    comparison="baseline",
+    metric_thresholds=None,
+    psi_threshold=None,
+    report_name=None,
+    include_plots=True,
+    experiment_name=None,
+)
+```
+
+Compares baseline and current prediction or performance distributions.
+
+- With `prediction_score`, computes PSI for prediction score distribution shift.
+- With `target` and `prediction`, computes baseline/current metrics, deltas, ratios, and threshold flags.
+- With labels and probabilities, computes classification probability residual PSI.
+- With regression labels, computes regression residual PSI.
+- `metric_thresholds` can override `settings.model.metric_thresholds` for this report.
+- `psi_threshold` overrides `settings.model.performance_drift_psi_threshold`.
+- Metadata mode is `"prediction_only"` when labels are absent and `"labeled"` when `target` and `prediction` are supplied.
+- Exports `result.artifacts["html"]` by default with score distribution, residual distribution, residual scatter, and metric delta tables when available.
+- Returns metrics under `performance_drift/<comparison>/...`.
+
 ### `calibration_report(...)`
 
 ```python
@@ -465,6 +498,7 @@ Relevant model defaults live under `settings.model`:
 
 - `feature_importance_method`: default method for `feature_importance()` when `method=None`; defaults to `"both"`.
 - `include_feature_importance_plots`: default artifact behavior for `feature_importance()` when `include_plots=None`; defaults to `True`.
+- `performance_drift_psi_threshold`: default PSI flag threshold for `performance_drift_report()`; defaults to `0.2`.
 
 Settings use nested Pydantic models and environment variables with the `LUMOSAI_` prefix.
 

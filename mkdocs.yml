@@ -19,6 +19,7 @@ nav:
       - Ongoing Monitoring Pipeline: recipes/ongoing-monitoring-pipeline.md
       - Monitoring Bundle: recipes/monitoring-bundle.md
       - Representative Samples: recipes/representative-samples.md
+      - Performance Drift: recipes/performance-drift.md
       - Feature Importance: recipes/feature-importance.md
       - Pipeline Patterns: recipes/pipeline-patterns.md
       - MLflow Layout: recipes/mlflow-layout.md
