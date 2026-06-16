@@ -104,6 +104,23 @@ def test_data_sample_settings_env_override(monkeypatch) -> None:
     assert loaded.data.log_sample_artifacts is True
 
 
+def test_important_drift_settings_defaults() -> None:
+    loaded = Settings()
+
+    assert loaded.data.important_drift_top_n == 10
+    assert loaded.data.alert_on_important_feature_drift is True
+
+
+def test_important_drift_settings_env_override(monkeypatch: MonkeyPatch) -> None:
+    monkeypatch.setenv("LUMOSAI_DATA__IMPORTANT_DRIFT_TOP_N", "3")
+    monkeypatch.setenv("LUMOSAI_DATA__ALERT_ON_IMPORTANT_FEATURE_DRIFT", "false")
+
+    loaded = Settings()
+
+    assert loaded.data.important_drift_top_n == 3
+    assert loaded.data.alert_on_important_feature_drift is False
+
+
 def test_bundle_settings_defaults() -> None:
     loaded = Settings()
 

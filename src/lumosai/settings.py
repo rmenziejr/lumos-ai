@@ -36,6 +36,8 @@ class DataSettings(BaseModel):
     sample_artifact_format: Literal["parquet", "csv"] = "parquet"
     log_sample_metadata: bool = True
     log_sample_artifacts: bool = False
+    important_drift_top_n: int = Field(default=10, ge=1)
+    alert_on_important_feature_drift: bool = True
 
 
 class MetricThreshold(BaseModel):
