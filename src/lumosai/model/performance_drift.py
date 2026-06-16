@@ -9,6 +9,7 @@ import pandas as pd
 from lumosai.artifacts import (
     artifact_workspace,
     html_artifact_metadata,
+    local_html_artifact_path,
     log_result_with_html_artifact,
     should_keep_html_artifact,
 )
@@ -388,7 +389,11 @@ def performance_drift_report(
         title = report_name or "Performance Drift Report"
         keep_local = should_keep_html_artifact(experiment_name=experiment_name)
         with artifact_workspace(keep_local=keep_local) as workspace:
-            html_path = workspace / "performance_drift_report.html"
+            html_path = local_html_artifact_path(
+                workspace,
+                "performance_drift_report.html",
+                report_name=report_name,
+            )
             html_path.write_text(
                 performance_drift_html(
                     title=title,
