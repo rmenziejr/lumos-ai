@@ -26,6 +26,8 @@ drift_metrics = run.results["drift_benchmark"].metrics
 
 `feature_columns` are the analysis columns for drift and downstream model reports. Temporal columns should be passed through `temporal_features` or `time_column`; do not include them in `feature_columns`.
 
+`monitoring_report()` does not automatically attach feature-importance results yet. For importance-aware drift alerts, call `drift_report()` directly with `important_features` or `importance_result` in the monitoring step where that information is available.
+
 If you have one time column, `time_column` is enough:
 
 ```python

@@ -70,6 +70,32 @@ print(importance.metrics["importance/permutation/monthly_spend"])
 print(importance.metrics["importance/shap/monthly_spend"])
 ```
 
+## Use Importance For Drift Alerts
+
+Pass an importance result into a later drift report when training and monitoring happen in the same workflow:
+
+```python
+from lumosai.data import drift_report
+
+importance = feature_importance(
+    model,
+    holdout,
+    target="target",
+    feature_columns=feature_columns,
+    method="permutation",
+)
+
+drift = drift_report(
+    train_benchmark,
+    production_window,
+    temporal_features=["event_date"],
+    feature_columns=feature_columns,
+    importance_result=importance,
+)
+```
+
+This keeps ordinary drift-share alerts and adds important-feature drift metrics such as `drift/benchmark/important_feature/glucose/drifted`.
+
 Set shared defaults with environment variables:
 
 ```bash

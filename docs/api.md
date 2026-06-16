@@ -149,6 +149,8 @@ drift_report(
     comparison="benchmark",
     report_name=None,
     evidently_kwargs=None,
+    important_features=None,
+    importance_result=None,
     include_html=True,
     experiment_name=None,
 )
@@ -161,6 +163,11 @@ Runs an Evidently data drift report.
 - Treats `categorical_columns` as semantic categorical overrides where the installed Evidently API supports it.
 - Namespaces metrics under `drift/<comparison>/...`.
 - Flags when drift share exceeds `settings.data.drift_share_threshold`.
+- `important_features` names model-critical features to track as a second alert lane.
+- `importance_result` can be a `feature_importance()` result; `drift_report()` uses the top N permutation features from `settings.data.important_drift_top_n`.
+- Explicit `important_features` take precedence over `importance_result`.
+- Adds `drift/<comparison>/important_n_drifted_columns`, `drift/<comparison>/important_share_drifted_columns`, and `drift/<comparison>/important_feature/<feature>/drifted` when important features are supplied.
+- Flags `important_feature_drift` when an important feature drifts and `settings.data.alert_on_important_feature_drift` is true.
 - Exports `result.artifacts["html"]` by default. With no MLflow experiment configured, the HTML file is retained locally; with MLflow artifact logging enabled, the result stores the MLflow artifact path.
 - Supports current Evidently APIs and legacy report payloads.
 
@@ -451,6 +458,8 @@ Relevant sample defaults live under `settings.data`:
 - `sample_artifact_format`: format for suffixless sample artifact paths, either `"parquet"` or `"csv"`.
 - `log_sample_metadata`: default metadata logging behavior for `build_sample()`.
 - `log_sample_artifacts`: default raw sample artifact logging behavior for `build_sample()`.
+- `important_drift_top_n`: number of top permutation features to pull from `importance_result`; defaults to `10`.
+- `alert_on_important_feature_drift`: whether drifted important features are added to `result.flagged`; defaults to `True`.
 
 Relevant model defaults live under `settings.model`:
 
