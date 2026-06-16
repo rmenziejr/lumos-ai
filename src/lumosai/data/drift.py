@@ -104,6 +104,55 @@ def _extract_drift_summary(report_payload: dict[str, Any]) -> dict[str, Any]:
     return {"dataset_drift": False, "n_drifted_columns": 0, "share_drifted_columns": 0.0}
 
 
+def _importance_feature_rows(importance_result: LumosResult) -> list[dict[str, Any]]:
+    methods = importance_result.summary.get("methods")
+    if not isinstance(methods, dict):
+        msg = "importance_result must include permutation rows in summary['methods']"
+        raise LumosValidationError(msg)
+    permutation = methods.get("permutation")
+    if not isinstance(permutation, dict):
+        msg = "importance_result must include permutation rows in summary['methods']['permutation']"
+        raise LumosValidationError(msg)
+    rows = permutation.get("features")
+    if not isinstance(rows, list):
+        msg = "importance_result must include permutation rows in summary['methods']['permutation']['features']"
+        raise LumosValidationError(msg)
+    return rows
+
+
+def _important_features_from_result(importance_result: LumosResult) -> list[str]:
+    features: list[str] = []
+    for row in _importance_feature_rows(importance_result):
+        if not isinstance(row, dict) or not isinstance(row.get("feature"), str):
+            msg = "importance_result permutation rows must include string feature names"
+            raise LumosValidationError(msg)
+        features.append(row["feature"])
+    return features[: settings.data.important_drift_top_n]
+
+
+def _resolve_important_features(
+    *,
+    important_features: list[str] | None,
+    importance_result: LumosResult | None,
+    analysis_columns: pd.Index,
+) -> tuple[list[str], str | None]:
+    if important_features is not None:
+        resolved = list(important_features)
+        source = "explicit"
+    elif importance_result is not None:
+        resolved = _important_features_from_result(importance_result)
+        source = "importance_result"
+    else:
+        return [], None
+
+    missing = [feature for feature in resolved if feature not in analysis_columns]
+    if missing:
+        msg = "important_features must be included in analyzed drift columns: "
+        msg += ", ".join(missing)
+        raise LumosValidationError(msg)
+    return resolved, source
+
+
 def _report_payload(report: Any, run_result: Any) -> dict[str, Any]:
     payload_source = run_result if run_result is not None else report
     for method_name in ("as_dict", "dict", "dump_dict"):
@@ -315,6 +364,8 @@ def drift_report(
     comparison: str = "benchmark",
     report_name: str | None = None,
     evidently_kwargs: dict[str, Any] | None = None,
+    important_features: list[str] | None = None,
+    importance_result: LumosResult | None = None,
     include_html: bool = True,
     experiment_name: str | None = None,
 ) -> LumosResult:
@@ -365,6 +416,11 @@ def drift_report(
         categorical_columns=categorical_columns,
         analysis_columns=reference_for_drift.columns,
     )
+    resolved_important_features, important_feature_source = _resolve_important_features(
+        important_features=important_features,
+        importance_result=importance_result,
+        analysis_columns=reference_for_drift.columns,
+    )
 
     report_cls, preset_cls = _evidently_classes()
     preset_kwargs, report_kwargs = _split_evidently_kwargs(evidently_kwargs)
@@ -412,6 +468,16 @@ def drift_report(
         **(
             {"categorical_columns": selected_categorical_columns}
             if selected_categorical_columns
+            else {}
+        ),
+        **(
+            {"important_features": resolved_important_features}
+            if resolved_important_features
+            else {}
+        ),
+        **(
+            {"important_feature_source": important_feature_source}
+            if important_feature_source is not None
             else {}
         ),
     }
