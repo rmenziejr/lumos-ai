@@ -739,10 +739,17 @@ def test_drift_report_uses_installed_evidently_api() -> None:
         current,
         temporal_features=["event_date"],
         feature_columns=["x"],
+        important_features=["x"],
         report_name="Installed Evidently Drift",
         evidently_kwargs={"report": {"tags": ["integration"]}},
     )
 
     assert "drift/benchmark/n_drifted_columns" in result.metrics
     assert "drift/benchmark/share_drifted_columns" in result.metrics
+    assert result.metrics["drift/benchmark/important_feature/x/drifted"] == 1.0
+    assert result.metrics["drift/benchmark/important_n_drifted_columns"] == 1.0
+    assert any(
+        flag.get("metric") == "important_feature_drift" and flag.get("feature") == "x"
+        for flag in result.flagged
+    )
     assert result.metadata["report_name"] == "Installed Evidently Drift"
