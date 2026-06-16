@@ -3,7 +3,13 @@ from __future__ import annotations
 import lumosai as la
 from lumosai import LumosRun
 from lumosai.data import drift_report, profile
-from lumosai.model import bias_report, calibration_report, get_metrics, performance_report
+from lumosai.model import (
+    bias_report,
+    calibration_report,
+    get_metrics,
+    performance_drift_report,
+    performance_report,
+)
 from lumosai.results import LumosResult
 from lumosai.results import LumosRun as ResultsLumosRun
 from lumosai.settings import settings
@@ -13,6 +19,7 @@ def test_top_level_exports_match_domain_exports() -> None:
     assert la.profile is profile
     assert la.drift_report is drift_report
     assert la.performance_report is performance_report
+    assert la.performance_drift_report is performance_drift_report
     assert la.bias_report is bias_report
     assert la.calibration_report is calibration_report
     assert la.get_metrics is get_metrics
@@ -54,3 +61,11 @@ def test_training_report_public_api() -> None:
     from lumosai import training_report
 
     assert callable(training_report)
+
+
+def test_performance_drift_public_api() -> None:
+    import lumosai
+    from lumosai.model import performance_drift_report
+
+    assert lumosai.performance_drift_report is performance_drift_report
+    assert callable(performance_drift_report)

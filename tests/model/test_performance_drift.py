@@ -1,5 +1,7 @@
 from __future__ import annotations
 
+from pathlib import Path
+
 import pandas as pd
 import pytest
 
@@ -101,3 +103,21 @@ def test_labeled_regression_adds_metric_and_residual_drift() -> None:
     assert result.metrics["performance_drift/baseline/current/rmse"] > 0.0
     assert "performance_drift/baseline/residual_psi" in result.metrics
     assert result.summary["residual"]["kind"] == "regression"
+
+
+def test_performance_drift_creates_default_html_artifact(tmp_path, monkeypatch) -> None:
+    monkeypatch.setattr(settings.artifacts, "local_dir", tmp_path)
+    baseline = pd.DataFrame({"score": [0.01, 0.02, 0.03, 0.04, 0.05]})
+    current = pd.DataFrame({"score": [0.95, 0.96, 0.97, 0.98, 0.99]})
+
+    result = performance_drift_report(
+        baseline,
+        current,
+        prediction_score="score",
+        report_name="Score Drift",
+    )
+
+    html_path = Path(result.artifacts["html"])
+    html = html_path.read_text(encoding="utf-8")
+    assert "Score Drift" in html
+    assert "Score Distribution" in html

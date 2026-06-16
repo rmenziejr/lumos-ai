@@ -6,11 +6,18 @@ from typing import Any
 import numpy as np
 import pandas as pd
 
+from lumosai.artifacts import (
+    artifact_workspace,
+    html_artifact_metadata,
+    log_result_with_html_artifact,
+    should_keep_html_artifact,
+)
 from lumosai.data.ingest import to_pandas
 from lumosai.data.validation import require_columns
 from lumosai.exceptions import LumosValidationError
 from lumosai.mlflow import log_result
 from lumosai.model.metrics import TaskType, compare_metric, detect_task_type, get_metrics
+from lumosai.model.plots import performance_drift_html
 from lumosai.model.scores import (
     ClassificationScores,
     ScoreInput,
@@ -177,6 +184,7 @@ def performance_drift_report(
 
     mode = "labeled" if target is not None and prediction is not None else "prediction_only"
     metrics: dict[str, float] = {}
+    artifacts: dict[str, Any] = {}
     flagged: list[dict[str, Any]] = []
     summary: dict[str, Any] = {
         "baseline_rows": len(baseline_pd),
@@ -189,6 +197,10 @@ def performance_drift_report(
     }
     if report_name is not None:
         metadata["report_name"] = report_name
+    metric_summary: dict[str, Any] | None = None
+    score_plot_distributions: dict[str, tuple[Any, Any]] = {}
+    residual_plot_distribution: tuple[Any, Any] | None = None
+    residual_scatter: tuple[Any, Any, str] | None = None
 
     baseline_scores: ClassificationScores | None = None
     current_scores: ClassificationScores | None = None
@@ -227,7 +239,7 @@ def performance_drift_report(
             score_labels=current_scores.labels if current_scores is not None else None,
             task_type=resolved_task,
         )
-        metric_summary: dict[str, Any] = {}
+        metric_summary = {}
         thresholds = {**settings.model.metric_thresholds, **(metric_thresholds or {})}
         for metric_name in sorted(set(baseline_raw_metrics) & set(current_raw_metrics)):
             baseline_value = baseline_raw_metrics[metric_name]
@@ -283,6 +295,7 @@ def performance_drift_report(
         )
         score_summary: dict[str, Any] = {"columns": list(score_columns)}
         for key, (baseline_score, current_score) in score_columns.items():
+            score_plot_distributions[key] = (baseline_score, current_score)
             value = _psi(baseline_score, current_score)
             metric_name = (
                 f"performance_drift/{safe_comparison}/score_psi"
@@ -340,6 +353,20 @@ def performance_drift_report(
             residual_psi = _psi(baseline_residual, current_residual)
             metrics[f"performance_drift/{safe_comparison}/residual_psi"] = residual_psi
             summary["residual"] = {"kind": residual_kind, "psi": residual_psi}
+            residual_plot_distribution = (baseline_residual, current_residual)
+            if residual_kind == "classification_probability" and current_scores is not None:
+                if current_scores.positive_label is not None:
+                    index = current_scores.label_index(current_scores.positive_label)
+                    x_values = current_scores.values[:, index]
+                else:
+                    x_values = np.asarray(range(len(current_residual)), dtype=float)
+                residual_scatter = (x_values, current_residual, "Predicted Probability")
+            elif residual_kind == "regression":
+                residual_scatter = (
+                    current_pd[prediction].to_numpy(dtype=float),
+                    current_residual,
+                    "Prediction",
+                )
             if residual_psi > resolved_psi_threshold:
                 flagged.append(
                     {
@@ -354,7 +381,42 @@ def performance_drift_report(
         metrics=metrics,
         summary=summary,
         flagged=flagged,
+        artifacts=artifacts,
         metadata=metadata,
     )
+    if include_plots:
+        title = report_name or "Performance Drift Report"
+        keep_local = should_keep_html_artifact(experiment_name=experiment_name)
+        with artifact_workspace(keep_local=keep_local) as workspace:
+            html_path = workspace / "performance_drift_report.html"
+            html_path.write_text(
+                performance_drift_html(
+                    title=title,
+                    metrics=metrics,
+                    metric_summary=metric_summary,
+                    score_distributions=score_plot_distributions,
+                    residual_distribution=residual_plot_distribution,
+                    residual_scatter=residual_scatter,
+                ),
+                encoding="utf-8",
+            )
+            artifacts, _ = html_artifact_metadata(
+                html_path,
+                artifact_path="performance_drift",
+                experiment_name=experiment_name,
+            )
+            result = LumosResult(
+                metrics=metrics,
+                summary=summary,
+                flagged=flagged,
+                artifacts=artifacts,
+                metadata=metadata,
+            )
+            return log_result_with_html_artifact(
+                result,
+                html_path=html_path,
+                artifact_path="performance_drift",
+                experiment_name=experiment_name,
+            )
     log_result(result, experiment_name=experiment_name)
     return result

@@ -15,6 +15,7 @@ __all__ = [
     "feature_importance",
     "get_metrics",
     "monitoring_report",
+    "performance_drift_report",
     "performance_report",
     "profile",
     "settings",
@@ -32,6 +33,7 @@ def __getattr__(name: str) -> Any:
         "calibration_report",
         "feature_importance",
         "get_metrics",
+        "performance_drift_report",
         "performance_report",
     }:
         from lumosai import model

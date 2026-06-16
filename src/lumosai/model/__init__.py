@@ -7,6 +7,7 @@ __all__ = [
     "calibration_report",
     "feature_importance",
     "get_metrics",
+    "performance_drift_report",
     "performance_report",
 ]
 
@@ -32,4 +33,8 @@ def __getattr__(name: str) -> Any:
         from lumosai.model.performance import performance_report
 
         return performance_report
+    if name == "performance_drift_report":
+        from lumosai.model.performance_drift import performance_drift_report
+
+        return performance_drift_report
     raise AttributeError(f"module 'lumosai.model' has no attribute {name!r}")

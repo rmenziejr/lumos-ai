@@ -201,6 +201,97 @@ def performance_html(
     return _html_document(title, sections)
 
 
+def _distribution_plot(
+    baseline: Any,
+    current: Any,
+    *,
+    title: str,
+    xlabel: str,
+) -> str:
+    baseline_array = np.asarray(baseline, dtype=float)
+    current_array = np.asarray(current, dtype=float)
+    fig, ax = plt.subplots(figsize=(6, 4))
+    bins = min(20, max(3, int(np.sqrt(max(len(baseline_array), len(current_array))))))
+    ax.hist(baseline_array, bins=bins, alpha=0.55, label="Baseline")
+    ax.hist(current_array, bins=bins, alpha=0.55, label="Current")
+    ax.set(xlabel=xlabel, ylabel="Rows", title=title)
+    ax.legend(loc="best")
+    fig.tight_layout()
+    return _figure_html(fig, title)
+
+
+def _metric_delta_table(metric_summary: dict[str, Any]) -> str:
+    rows = []
+    for name, values in sorted(metric_summary.items()):
+        baseline = f"{float(values['baseline']):.6g}"
+        current = f"{float(values['current']):.6g}"
+        delta = f"{float(values['delta']):.6g}"
+        rows.append(
+            "<tr>"
+            f"<td>{html.escape(str(name))}</td>"
+            f"<td>{html.escape(baseline)}</td>"
+            f"<td>{html.escape(current)}</td>"
+            f"<td>{html.escape(delta)}</td>"
+            f"<td>{html.escape(str(values['flagged']))}</td>"
+            "</tr>"
+        )
+    return (
+        "<table><thead><tr>"
+        "<th>Metric</th><th>Baseline</th><th>Current</th><th>Delta</th><th>Flagged</th>"
+        "</tr></thead><tbody>"
+        + "".join(rows)
+        + "</tbody></table>"
+    )
+
+
+def performance_drift_html(
+    *,
+    title: str,
+    metrics: dict[str, float],
+    metric_summary: dict[str, Any] | None = None,
+    score_distributions: dict[str, tuple[Any, Any]] | None = None,
+    residual_distribution: tuple[Any, Any] | None = None,
+    residual_scatter: tuple[Any, Any, str] | None = None,
+) -> str:
+    sections: list[tuple[str, str]] = [("Metrics", _metric_table(metrics))]
+    if metric_summary:
+        sections.append(("Metric Drift", _metric_delta_table(metric_summary)))
+    for name, (baseline, current) in (score_distributions or {}).items():
+        heading = "Score Distribution" if name == "score" else f"Score Distribution: {name}"
+        sections.append(
+            (
+                heading,
+                _distribution_plot(
+                    baseline,
+                    current,
+                    title=heading,
+                    xlabel="Prediction Score",
+                ),
+            )
+        )
+    if residual_distribution is not None:
+        sections.append(
+            (
+                "Residual Distribution",
+                _distribution_plot(
+                    residual_distribution[0],
+                    residual_distribution[1],
+                    title="Residual Distribution",
+                    xlabel="Residual",
+                ),
+            )
+        )
+    if residual_scatter is not None:
+        x_values, residuals, xlabel = residual_scatter
+        fig, ax = plt.subplots(figsize=(5, 4))
+        ax.scatter(np.asarray(x_values, dtype=float), np.asarray(residuals, dtype=float))
+        ax.axhline(0.0, color="#6a737d", linestyle="--", linewidth=1)
+        ax.set(xlabel=xlabel, ylabel="Residual", title="Current Residuals")
+        fig.tight_layout()
+        sections.append(("Current Residuals", _figure_html(fig, "Current Residuals")))
+    return _html_document(title, sections)
+
+
 def _regression_plots(y_true: pd.Series, y_pred: pd.Series) -> list[tuple[str, str]]:
     residuals = y_true.to_numpy(dtype=float) - y_pred.to_numpy(dtype=float)
     predicted = y_pred.to_numpy(dtype=float)
