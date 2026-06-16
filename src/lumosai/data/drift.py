@@ -137,6 +137,9 @@ def _resolve_important_features(
     analysis_columns: pd.Index,
 ) -> tuple[list[str], str | None]:
     if important_features is not None:
+        if not isinstance(important_features, list):
+            msg = "important_features must be a list of string feature names"
+            raise LumosValidationError(msg)
         resolved = list(important_features)
         if any(not isinstance(feature, str) for feature in resolved):
             msg = "important_features must contain string feature names"

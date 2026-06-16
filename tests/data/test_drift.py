@@ -348,6 +348,38 @@ def test_drift_report_rejects_non_string_important_features(
         )
 
 
+def test_drift_report_rejects_string_important_features_container(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    _aggregate_only_report(monkeypatch)
+    reference = pd.DataFrame({"event_date": ["2026-01-01"], "x": [1.0]})
+    current = pd.DataFrame({"event_date": ["2026-01-02"], "x": [1.5]})
+
+    with pytest.raises(LumosValidationError, match="list of string feature names"):
+        drift_report(
+            reference,
+            current,
+            temporal_features=["event_date"],
+            important_features="x",  # type: ignore[arg-type]
+        )
+
+
+def test_drift_report_rejects_integer_important_features_container(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    _aggregate_only_report(monkeypatch)
+    reference = pd.DataFrame({"event_date": ["2026-01-01"], "x": [1.0]})
+    current = pd.DataFrame({"event_date": ["2026-01-02"], "x": [1.5]})
+
+    with pytest.raises(LumosValidationError, match="list of string feature names"):
+        drift_report(
+            reference,
+            current,
+            temporal_features=["event_date"],
+            important_features=1,  # type: ignore[arg-type]
+        )
+
+
 def test_drift_report_records_explicit_important_features(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
