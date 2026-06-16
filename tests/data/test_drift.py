@@ -332,6 +332,44 @@ def test_drift_report_rejects_important_features_outside_analysis_columns(
         )
 
 
+def test_drift_report_rejects_non_string_important_features(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    _aggregate_only_report(monkeypatch)
+    reference = pd.DataFrame({"event_date": ["2026-01-01"], "x": [1.0]})
+    current = pd.DataFrame({"event_date": ["2026-01-02"], "x": [1.5]})
+
+    with pytest.raises(LumosValidationError, match="string feature names"):
+        drift_report(
+            reference,
+            current,
+            temporal_features=["event_date"],
+            important_features=[1],  # type: ignore[list-item]
+        )
+
+
+def test_drift_report_records_explicit_important_features(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    _aggregate_only_report(monkeypatch)
+    reference = pd.DataFrame(
+        {"event_date": ["2026-01-01"], "x": [1.0], "y": [2.0]}
+    )
+    current = pd.DataFrame(
+        {"event_date": ["2026-01-02"], "x": [1.5], "y": [2.5]}
+    )
+
+    result = drift_report(
+        reference,
+        current,
+        temporal_features=["event_date"],
+        important_features=["y", "x"],
+    )
+
+    assert result.metadata["important_features"] == ["y", "x"]
+    assert result.metadata["important_feature_source"] == "explicit"
+
+
 def test_drift_report_rejects_importance_result_without_permutation_rows(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:

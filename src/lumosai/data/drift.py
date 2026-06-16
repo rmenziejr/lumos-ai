@@ -138,6 +138,9 @@ def _resolve_important_features(
 ) -> tuple[list[str], str | None]:
     if important_features is not None:
         resolved = list(important_features)
+        if any(not isinstance(feature, str) for feature in resolved):
+            msg = "important_features must contain string feature names"
+            raise LumosValidationError(msg)
         source = "explicit"
     elif importance_result is not None:
         resolved = _important_features_from_result(importance_result)
