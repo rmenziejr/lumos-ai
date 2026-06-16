@@ -638,6 +638,87 @@ def test_drift_report_can_disable_important_feature_flags(
     assert result.flagged == []
 
 
+def test_drift_report_extracts_evidently_value_drift_decisions(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    reference = pd.DataFrame(
+        {"event_date": ["2026-01-01"], "x": [1.0], "y": [1.0]}
+    )
+    current = pd.DataFrame(
+        {"event_date": ["2026-01-02"], "x": [10.0], "y": [1.0]}
+    )
+
+    class FakeReport:
+        def __init__(self, metrics: list[Any]) -> None:
+            self.metrics = metrics
+
+        def run(
+            self,
+            reference_data: pd.DataFrame,
+            current_data: pd.DataFrame,
+            column_mapping: Any = None,
+        ) -> None:
+            return None
+
+        def as_dict(self) -> dict[str, Any]:
+            return {
+                "metrics": [
+                    {
+                        "metric_name": "DriftedColumnsCount(columns=x,y,drift_share=0.5)",
+                        "config": {
+                            "type": "evidently:metric_v2:DriftedColumnsCount",
+                            "columns": ["x", "y"],
+                            "drift_share": 0.5,
+                        },
+                        "value": {"count": 1.0, "share": 0.5},
+                    },
+                    {
+                        "metric_name": "ValueDrift(column=x,method=K-S p_value,threshold=0.05)",
+                        "config": {
+                            "type": "evidently:metric_v2:ValueDrift",
+                            "column": "x",
+                            "method": "K-S p_value",
+                            "threshold": 0.05,
+                        },
+                        "value": 0.01,
+                    },
+                    {
+                        "metric_name": "ValueDrift(column=y,method=Z-test p_value,threshold=0.05)",
+                        "config": {
+                            "type": "evidently:metric_v2:ValueDrift",
+                            "column": "y",
+                            "method": "Z-test p_value",
+                            "threshold": 0.05,
+                        },
+                        "value": 1.0,
+                    },
+                ]
+            }
+
+    monkeypatch.setattr("lumosai.data.drift.Report", FakeReport)
+    monkeypatch.setattr("lumosai.data.drift.DataDriftPreset", lambda: object())
+    monkeypatch.setattr(settings.data, "drift_share_threshold", 1.0)
+
+    result = drift_report(
+        reference,
+        current,
+        temporal_features=["event_date"],
+        important_features=["x", "y"],
+    )
+
+    assert result.metrics["drift/benchmark/important_feature/x/drifted"] == 1.0
+    assert result.metrics["drift/benchmark/important_feature/y/drifted"] == 0.0
+    assert result.metrics["drift/benchmark/important_n_drifted_columns"] == 1.0
+    assert result.flagged == [
+        {
+            "comparison": "benchmark",
+            "metric": "important_feature_drift",
+            "feature": "x",
+            "importance_rank": 1,
+        }
+    ]
+
+
 @pytest.mark.integration
 def test_drift_report_uses_installed_evidently_api() -> None:
     reference = pd.DataFrame(

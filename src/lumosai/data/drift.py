@@ -121,6 +121,24 @@ def _coerce_drift_detected(value: Any) -> bool | None:
 def _extract_column_drift_decisions(report_payload: dict[str, Any]) -> dict[str, bool]:
     decisions: dict[str, bool] = {}
     for metric in report_payload.get("metrics", []):
+        config = metric.get("config", {})
+        value = metric.get("value")
+        if isinstance(config, dict) and isinstance(value, int | float):
+            metric_type = config.get("type")
+            column = config.get("column")
+            threshold = config.get("threshold")
+            if (
+                isinstance(metric_type, str)
+                and "ValueDrift" in metric_type
+                and isinstance(column, str)
+                and isinstance(threshold, int | float)
+            ):
+                method = config.get("method", "")
+                if isinstance(method, str) and "p_value" in method.lower():
+                    decisions[column] = value < threshold
+                else:
+                    decisions[column] = value > threshold
+
         for container_name in ("result", "value"):
             container = metric.get(container_name, {})
             if not isinstance(container, dict):
