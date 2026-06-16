@@ -668,9 +668,36 @@ def test_drift_report_can_disable_important_feature_flags(
 def test_drift_report_defaults_important_feature_metrics_to_no_drift_without_column_details(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
-    _aggregate_only_report(monkeypatch)
     reference = pd.DataFrame({"event_date": ["2026-01-01"], "x": [1.0], "y": [2.0]})
     current = pd.DataFrame({"event_date": ["2026-01-02"], "x": [1.5], "y": [2.5]})
+
+    class FakeReport:
+        def __init__(self, metrics: list[Any]) -> None:
+            self.metrics = metrics
+
+        def run(
+            self,
+            reference_data: pd.DataFrame,
+            current_data: pd.DataFrame,
+            column_mapping: Any = None,
+        ) -> None:
+            return None
+
+        def as_dict(self) -> dict[str, Any]:
+            return {
+                "metrics": [
+                    {
+                        "result": {
+                            "dataset_drift": True,
+                            "number_of_drifted_columns": 1,
+                            "share_of_drifted_columns": 0.5,
+                        }
+                    }
+                ]
+            }
+
+    monkeypatch.setattr("lumosai.data.drift.Report", FakeReport)
+    monkeypatch.setattr("lumosai.data.drift.DataDriftPreset", lambda: object())
 
     result = drift_report(
         reference,
@@ -679,11 +706,13 @@ def test_drift_report_defaults_important_feature_metrics_to_no_drift_without_col
         important_features=["x", "y"],
     )
 
+    assert result.metrics["drift/benchmark/n_drifted_columns"] == 1.0
+    assert result.metrics["drift/benchmark/share_drifted_columns"] == 0.5
     assert result.metrics["drift/benchmark/important_n_drifted_columns"] == 0.0
     assert result.metrics["drift/benchmark/important_share_drifted_columns"] == 0.0
     assert result.metrics["drift/benchmark/important_feature/x/drifted"] == 0.0
     assert result.metrics["drift/benchmark/important_feature/y/drifted"] == 0.0
-    assert result.flagged == []
+    assert not any(flag.get("metric") == "important_feature_drift" for flag in result.flagged)
 
 
 def test_drift_report_extracts_evidently_value_drift_decisions(
