@@ -149,6 +149,8 @@ drift_report(
     comparison="benchmark",
     report_name=None,
     evidently_kwargs=None,
+    important_features=None,
+    importance_result=None,
     include_html=True,
     experiment_name=None,
 )
@@ -161,6 +163,11 @@ Runs an Evidently data drift report.
 - Treats `categorical_columns` as semantic categorical overrides where the installed Evidently API supports it.
 - Namespaces metrics under `drift/<comparison>/...`.
 - Flags when drift share exceeds `settings.data.drift_share_threshold`.
+- `important_features` names model-critical features to track as a second alert lane.
+- `importance_result` can be a `feature_importance()` result; `drift_report()` uses the top N permutation features from `settings.data.important_drift_top_n`.
+- Explicit `important_features` take precedence over `importance_result`.
+- Adds `drift/<comparison>/important_n_drifted_columns`, `drift/<comparison>/important_share_drifted_columns`, and `drift/<comparison>/important_feature/<feature>/drifted` when important features are supplied.
+- Flags `important_feature_drift` when an important feature drifts and `settings.data.alert_on_important_feature_drift` is true.
 - Exports `result.artifacts["html"]` by default. With no MLflow experiment configured, the HTML file is retained locally; with MLflow artifact logging enabled, the result stores the MLflow artifact path.
 - Supports current Evidently APIs and legacy report payloads.
 
@@ -342,6 +349,39 @@ Computes current-window model performance.
 - Returns namespaced metrics under `performance/...`.
 - Stores `feature_columns` and `categorical_columns` in metadata when provided.
 
+### `performance_drift_report(...)`
+
+```python
+performance_drift_report(
+    baseline,
+    current,
+    *,
+    target=None,
+    prediction=None,
+    prediction_score=None,
+    score_labels=None,
+    task_type=None,
+    comparison="baseline",
+    metric_thresholds=None,
+    psi_threshold=None,
+    report_name=None,
+    include_plots=True,
+    experiment_name=None,
+)
+```
+
+Compares baseline and current prediction or performance distributions.
+
+- With `prediction_score`, computes PSI for prediction score distribution shift.
+- With `target` and `prediction`, computes baseline/current metrics, deltas, ratios, and threshold flags.
+- With labels and probabilities, computes classification probability residual PSI.
+- With regression labels, computes regression residual PSI.
+- `metric_thresholds` can override `settings.model.metric_thresholds` for this report.
+- `psi_threshold` overrides `settings.model.performance_drift_psi_threshold`.
+- Metadata mode is `"prediction_only"` when labels are absent and `"labeled"` when `target` and `prediction` are supplied.
+- Exports `result.artifacts["html"]` by default with score distribution, residual distribution, residual scatter, and metric delta tables when available.
+- Returns metrics under `performance_drift/<comparison>/...`.
+
 ### `calibration_report(...)`
 
 ```python
@@ -408,24 +448,31 @@ feature_importance(
     *,
     target,
     feature_columns,
-    method="permutation",
+    method=None,
     scoring=None,
     n_repeats=5,
     sample_size=None,
     random_state=42,
     report_name=None,
+    include_plots=None,
     experiment_name=None,
 )
 ```
 
 Computes model feature importance after training or evaluation.
 
-- `method="permutation"` is the default and uses scikit-learn permutation importance.
+- `method=None` uses `settings.model.feature_importance_method`, which defaults to `"both"`.
+- `method="both"` runs permutation importance and SHAP mean absolute importance in one result.
+- `method="permutation"` uses scikit-learn permutation importance.
 - `method="shap"` computes SHAP mean absolute importance and requires the optional `lumosai[importance]` dependency.
 - `feature_columns` must contain at least one feature and all features must exist in `data`.
 - `sample_size` optionally samples rows before computing importance.
 - `scoring`, `n_repeats`, and `random_state` apply to permutation importance.
-- Returns metrics under `importance/<feature>` and sorted feature rows in `result.summary["features"]`.
+- `include_plots=None` uses `settings.model.include_feature_importance_plots`, which defaults to `True`.
+- Exports `result.artifacts["html"]` by default with permutation and/or SHAP importance plots.
+- Returns metrics under `importance/<method>/<feature>`.
+- Stores method-specific rows in `result.summary["methods"][method]["features"]`.
+- Keeps `result.summary["features"]` as a convenience alias for permutation rows when available, otherwise SHAP rows.
 - Stores method, feature columns, and optional `report_name` in metadata.
 
 ## Settings
@@ -444,6 +491,14 @@ Relevant sample defaults live under `settings.data`:
 - `sample_artifact_format`: format for suffixless sample artifact paths, either `"parquet"` or `"csv"`.
 - `log_sample_metadata`: default metadata logging behavior for `build_sample()`.
 - `log_sample_artifacts`: default raw sample artifact logging behavior for `build_sample()`.
+- `important_drift_top_n`: number of top permutation features to pull from `importance_result`; defaults to `10`.
+- `alert_on_important_feature_drift`: whether drifted important features are added to `result.flagged`; defaults to `True`.
+
+Relevant model defaults live under `settings.model`:
+
+- `feature_importance_method`: default method for `feature_importance()` when `method=None`; defaults to `"both"`.
+- `include_feature_importance_plots`: default artifact behavior for `feature_importance()` when `include_plots=None`; defaults to `True`.
+- `performance_drift_psi_threshold`: default PSI flag threshold for `performance_drift_report()`; defaults to `0.2`.
 
 Settings use nested Pydantic models and environment variables with the `LUMOSAI_` prefix.
 

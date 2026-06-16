@@ -176,7 +176,7 @@ with mlflow.start_run(run_name="final-training-report"):
     mlflow.sklearn.log_model(best_model, name="model")
 ```
 
-Run bias only when protected attributes are available and permitted for the training purpose. The training bundle includes feature importance when `model` and `feature_columns` are provided. Use the lower-level `feature_importance()` function directly when you need a non-default importance method such as SHAP.
+Run bias only when protected attributes are available and permitted for the training purpose. The training bundle includes feature importance when `model` and `feature_columns` are provided. The default importance method is controlled by `settings.model.feature_importance_method`; set it to `permutation` for base-install training jobs, or install `lumosai[importance]` when using the default `both` method with SHAP.
 
 ## Settings For Repeated Runs
 

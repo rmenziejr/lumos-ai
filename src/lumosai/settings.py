@@ -36,6 +36,8 @@ class DataSettings(BaseModel):
     sample_artifact_format: Literal["parquet", "csv"] = "parquet"
     log_sample_metadata: bool = True
     log_sample_artifacts: bool = False
+    important_drift_top_n: int = Field(default=10, ge=1)
+    alert_on_important_feature_drift: bool = True
 
 
 class MetricThreshold(BaseModel):
@@ -75,6 +77,9 @@ class ModelSettings(BaseModel):
     include_perm_importance: bool = True
     log_shap: bool = True
     shap_sample_size: int = 1000
+    feature_importance_method: Literal["permutation", "shap", "both"] = "both"
+    include_feature_importance_plots: bool = True
+    performance_drift_psi_threshold: float = Field(default=0.2, ge=0.0)
 
     @model_validator(mode="before")
     @classmethod

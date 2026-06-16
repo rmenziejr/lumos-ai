@@ -108,6 +108,8 @@ def test_training_report_runs_default_training_bundle(
     ]
     assert calls[0][1]["role"] == "train_benchmark"
     assert calls[1][1]["role"] == "holdout"
+    assert calls[3][1]["method"] == "both"
+    assert calls[3][1]["include_plots"] is True
 
 
 def test_training_report_runs_optional_profile_and_bias(

@@ -1,16 +1,27 @@
 from __future__ import annotations
 
 from collections.abc import Callable
+from pathlib import Path
 from typing import Any, Literal
 
 import numpy as np
 from sklearn.inspection import permutation_importance  # type: ignore[import-untyped]
 
+from lumosai.artifacts import (
+    artifact_workspace,
+    html_artifact_metadata,
+    log_result_with_html_artifact,
+    should_keep_html_artifact,
+)
 from lumosai.data.ingest import to_pandas
 from lumosai.data.validation import require_columns
 from lumosai.exceptions import LumosOptionalDependencyError, LumosValidationError
 from lumosai.mlflow import log_result
+from lumosai.model.plots import importance_html
 from lumosai.results import LumosResult
+from lumosai.settings import settings
+
+ImportanceMethod = Literal["permutation", "shap", "both"]
 
 
 def _require_shap() -> Any:
@@ -64,18 +75,54 @@ def _shap_feature_importance(
     return rows
 
 
+def _permutation_feature_importance(
+    model: Any,
+    frame_used: Any,
+    feature_columns: list[str],
+    target: str,
+    *,
+    scoring: str | Callable[..., float] | None,
+    n_repeats: int,
+    random_state: int,
+) -> list[dict[str, Any]]:
+    importance = permutation_importance(
+        model,
+        frame_used[feature_columns],
+        frame_used[target],
+        scoring=scoring,
+        n_repeats=n_repeats,
+        random_state=random_state,
+    )
+    rows = [
+        {
+            "feature": feature,
+            "importance_mean": float(mean),
+            "importance_std": float(std),
+        }
+        for feature, mean, std in zip(
+            feature_columns,
+            importance.importances_mean,
+            importance.importances_std,
+            strict=True,
+        )
+    ]
+    rows.sort(key=lambda row: row["importance_mean"], reverse=True)
+    return rows
+
+
 def feature_importance(
     model: Any,
     data: Any,
     *,
     target: str,
     feature_columns: list[str],
-    method: Literal["permutation", "shap"] = "permutation",
+    method: ImportanceMethod | None = None,
     scoring: str | Callable[..., float] | None = None,
     n_repeats: int = 5,
     sample_size: int | None = None,
     random_state: int = 42,
     report_name: str | None = None,
+    include_plots: bool | None = None,
     experiment_name: str | None = None,
 ) -> LumosResult:
     """Compute permutation or SHAP feature importance for a fitted model.
@@ -95,51 +142,86 @@ def feature_importance(
     if sample_size is not None and sample_size < 1:
         msg = "sample_size must be at least 1"
         raise LumosValidationError(msg)
-    if method not in {"permutation", "shap"}:
-        msg = "method must be one of: permutation, shap"
+    resolved_method = settings.model.feature_importance_method if method is None else method
+    if resolved_method not in {"permutation", "shap", "both"}:
+        msg = "method must be one of: permutation, shap, both"
         raise LumosValidationError(msg)
+    resolved_include_plots = (
+        settings.model.include_feature_importance_plots if include_plots is None else include_plots
+    )
 
     frame_used = frame
     if sample_size is not None and sample_size < len(frame):
         frame_used = frame.sample(n=sample_size, random_state=random_state)
 
-    if method == "shap":
-        rows = _shap_feature_importance(model, frame_used, feature_columns)
-    else:
-        importance = permutation_importance(
-            model,
-            frame_used[feature_columns],
-            frame_used[target],
-            scoring=scoring,
-            n_repeats=n_repeats,
-            random_state=random_state,
-        )
-        rows = [
-            {
-                "feature": feature,
-                "importance_mean": float(mean),
-                "importance_std": float(std),
-            }
-            for feature, mean, std in zip(
+    methods: dict[str, dict[str, Any]] = {}
+    if resolved_method in {"permutation", "both"}:
+        methods["permutation"] = {
+            "features": _permutation_feature_importance(
+                model,
+                frame_used,
                 feature_columns,
-                importance.importances_mean,
-                importance.importances_std,
-                strict=True,
+                target,
+                scoring=scoring,
+                n_repeats=n_repeats,
+                random_state=random_state,
             )
-        ]
-        rows.sort(key=lambda row: row["importance_mean"], reverse=True)
+        }
+    if resolved_method in {"shap", "both"}:
+        methods["shap"] = {
+            "features": _shap_feature_importance(model, frame_used, feature_columns)
+        }
+
+    metrics: dict[str, float] = {}
+    for method_name, method_summary in methods.items():
+        for row in method_summary["features"]:
+            metrics[f"importance/{method_name}/{row['feature']}"] = row["importance_mean"]
 
     metadata: dict[str, Any] = {
         "report_type": "feature_importance",
-        "method": method,
+        "method": resolved_method,
         "feature_columns": list(feature_columns),
     }
     if report_name is not None:
         metadata["report_name"] = report_name
+    summary = {
+        "rows": len(frame_used),
+        "methods": methods,
+        "features": methods.get("permutation", next(iter(methods.values())))["features"],
+    }
+    artifacts: dict[str, Any] = {}
+    html_path: Path | None = None
+    if resolved_include_plots:
+        title = report_name or "Feature Importance Report"
+        keep_local = should_keep_html_artifact(experiment_name=experiment_name)
+        with artifact_workspace(keep_local=keep_local) as workspace:
+            html_path = workspace / "feature_importance_report.html"
+            html_path.write_text(
+                importance_html(title=title, methods=methods),
+                encoding="utf-8",
+            )
+            artifacts, _ = html_artifact_metadata(
+                html_path,
+                artifact_path="feature_importance",
+                experiment_name=experiment_name,
+            )
+            result = LumosResult(
+                metrics=metrics,
+                summary=summary,
+                artifacts=artifacts,
+                metadata=metadata,
+            )
+            return log_result_with_html_artifact(
+                result,
+                html_path=html_path,
+                artifact_path="feature_importance",
+                experiment_name=experiment_name,
+            )
 
     result = LumosResult(
-        metrics={f"importance/{row['feature']}": row["importance_mean"] for row in rows},
-        summary={"rows": len(frame_used), "features": rows},
+        metrics=metrics,
+        summary=summary,
+        artifacts=artifacts,
         metadata=metadata,
     )
     log_result(result, experiment_name=experiment_name)

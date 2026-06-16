@@ -59,6 +59,23 @@ def test_metric_threshold_defaults_include_metric_direction() -> None:
     )
 
 
+def test_model_importance_settings_defaults() -> None:
+    loaded = Settings()
+
+    assert loaded.model.feature_importance_method == "both"
+    assert loaded.model.include_feature_importance_plots is True
+
+
+def test_model_importance_settings_env_override(monkeypatch: MonkeyPatch) -> None:
+    monkeypatch.setenv("LUMOSAI_MODEL__FEATURE_IMPORTANCE_METHOD", "permutation")
+    monkeypatch.setenv("LUMOSAI_MODEL__INCLUDE_FEATURE_IMPORTANCE_PLOTS", "false")
+
+    loaded = Settings()
+
+    assert loaded.model.feature_importance_method == "permutation"
+    assert loaded.model.include_feature_importance_plots is False
+
+
 def test_data_drift_share_threshold_must_be_share(monkeypatch: MonkeyPatch) -> None:
     monkeypatch.setenv("LUMOSAI_DATA__DRIFT_SHARE_THRESHOLD", "1.5")
 
@@ -85,6 +102,23 @@ def test_data_sample_settings_env_override(monkeypatch) -> None:
     assert loaded.data.default_sample_size == 2500
     assert loaded.data.sample_artifact_format == "csv"
     assert loaded.data.log_sample_artifacts is True
+
+
+def test_important_drift_settings_defaults() -> None:
+    loaded = Settings()
+
+    assert loaded.data.important_drift_top_n == 10
+    assert loaded.data.alert_on_important_feature_drift is True
+
+
+def test_important_drift_settings_env_override(monkeypatch: MonkeyPatch) -> None:
+    monkeypatch.setenv("LUMOSAI_DATA__IMPORTANT_DRIFT_TOP_N", "3")
+    monkeypatch.setenv("LUMOSAI_DATA__ALERT_ON_IMPORTANT_FEATURE_DRIFT", "false")
+
+    loaded = Settings()
+
+    assert loaded.data.important_drift_top_n == 3
+    assert loaded.data.alert_on_important_feature_drift is False
 
 
 def test_bundle_settings_defaults() -> None:

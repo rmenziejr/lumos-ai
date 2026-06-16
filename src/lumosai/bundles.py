@@ -506,6 +506,8 @@ def training_report(
                     holdout_pd,
                     target=target,
                     feature_columns=feature_columns,
+                    method=loaded_settings.model.feature_importance_method,
+                    include_plots=loaded_settings.model.include_feature_importance_plots,
                     report_name=f"{report_name} Feature Importance" if report_name else None,
                     experiment_name=resolved_experiment,
                 )
