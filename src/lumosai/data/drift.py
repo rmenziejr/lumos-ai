@@ -104,6 +104,58 @@ def _extract_drift_summary(report_payload: dict[str, Any]) -> dict[str, Any]:
     return {"dataset_drift": False, "n_drifted_columns": 0, "share_drifted_columns": 0.0}
 
 
+def _coerce_drift_detected(value: Any) -> bool | None:
+    if isinstance(value, bool):
+        return value
+    if isinstance(value, int | float):
+        return bool(value)
+    if isinstance(value, str):
+        normalized = value.strip().lower()
+        if normalized in {"true", "yes", "1"}:
+            return True
+        if normalized in {"false", "no", "0"}:
+            return False
+    return None
+
+
+def _extract_column_drift_decisions(report_payload: dict[str, Any]) -> dict[str, bool]:
+    decisions: dict[str, bool] = {}
+    for metric in report_payload.get("metrics", []):
+        for container_name in ("result", "value"):
+            container = metric.get(container_name, {})
+            if not isinstance(container, dict):
+                continue
+            column_payload = container.get("drift_by_columns") or container.get("columns")
+            if not isinstance(column_payload, dict):
+                continue
+            for feature, details in column_payload.items():
+                if not isinstance(feature, str) or not isinstance(details, dict):
+                    continue
+                detected = (
+                    _coerce_drift_detected(details.get("drift_detected"))
+                    if "drift_detected" in details
+                    else _coerce_drift_detected(details.get("drifted"))
+                )
+                if detected is not None:
+                    decisions[feature] = detected
+    return decisions
+
+
+def _important_feature_summary(
+    *,
+    important_features: list[str],
+    column_drift: dict[str, bool],
+) -> dict[str, Any]:
+    drifted_features = [feature for feature in important_features if column_drift.get(feature)]
+    share = len(drifted_features) / len(important_features) if important_features else 0.0
+    return {
+        "features": list(important_features),
+        "drifted_features": drifted_features,
+        "n_drifted_columns": len(drifted_features),
+        "share_drifted_columns": share,
+    }
+
+
 def _importance_feature_rows(importance_result: LumosResult) -> list[dict[str, Any]]:
     methods = importance_result.summary.get("methods")
     if not isinstance(methods, dict):
@@ -452,12 +504,36 @@ def drift_report(
         categorical_columns=selected_categorical_columns,
         report_name=report_name,
     )
-    summary = _extract_drift_summary(_report_payload(report, run_result))
+    report_payload = _report_payload(report, run_result)
+    summary = _extract_drift_summary(report_payload)
+    column_drift = _extract_column_drift_decisions(report_payload)
     safe_comparison = safe_comparison_name(comparison)
     metrics = {
         f"drift/{safe_comparison}/n_drifted_columns": float(summary["n_drifted_columns"]),
         f"drift/{safe_comparison}/share_drifted_columns": float(summary["share_drifted_columns"]),
     }
+    important_summary: dict[str, Any] | None = None
+    if resolved_important_features:
+        important_summary = _important_feature_summary(
+            important_features=resolved_important_features,
+            column_drift=column_drift,
+        )
+        summary["important_features"] = important_summary
+        metrics.update(
+            {
+                f"drift/{safe_comparison}/important_n_drifted_columns": float(
+                    important_summary["n_drifted_columns"]
+                ),
+                f"drift/{safe_comparison}/important_share_drifted_columns": float(
+                    important_summary["share_drifted_columns"]
+                ),
+            }
+        )
+        for feature in resolved_important_features:
+            drifted = feature in important_summary["drifted_features"]
+            metrics[f"drift/{safe_comparison}/important_feature/{feature}/drifted"] = (
+                1.0 if drifted else 0.0
+            )
     flagged: list[dict[str, Any]] = []
     if summary["share_drifted_columns"] > settings.data.drift_share_threshold:
         flagged.append(
@@ -468,6 +544,19 @@ def drift_report(
                 "threshold": settings.data.drift_share_threshold,
             }
         )
+    if important_summary is not None and settings.data.alert_on_important_feature_drift:
+        for rank, feature in enumerate(resolved_important_features, start=1):
+            if feature not in important_summary["drifted_features"]:
+                continue
+            flag = {
+                "comparison": safe_comparison,
+                "metric": "important_feature_drift",
+                "feature": feature,
+                "importance_rank": rank,
+            }
+            if important_feature_source == "importance_result":
+                flag["importance_method"] = "permutation"
+            flagged.append(flag)
 
     metadata = {
         "report_type": "drift",

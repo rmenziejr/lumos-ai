@@ -456,6 +456,188 @@ def test_drift_report_extracts_top_n_permutation_features(
     assert result.metadata["important_feature_source"] == "importance_result"
 
 
+def test_drift_report_flags_drifted_important_features(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    reference = pd.DataFrame(
+        {"event_date": ["2026-01-01"], "glucose": [100.0], "age": [40.0]}
+    )
+    current = pd.DataFrame(
+        {"event_date": ["2026-01-02"], "glucose": [180.0], "age": [41.0]}
+    )
+
+    class FakeReport:
+        def __init__(self, metrics: list[Any]) -> None:
+            self.metrics = metrics
+
+        def run(
+            self,
+            reference_data: pd.DataFrame,
+            current_data: pd.DataFrame,
+            column_mapping: Any = None,
+        ) -> None:
+            return None
+
+        def as_dict(self) -> dict[str, Any]:
+            return {
+                "metrics": [
+                    {
+                        "result": {
+                            "dataset_drift": False,
+                            "number_of_drifted_columns": 1,
+                            "share_of_drifted_columns": 0.5,
+                            "drift_by_columns": {
+                                "glucose": {"drift_detected": True},
+                                "age": {"drift_detected": False},
+                            },
+                        }
+                    }
+                ]
+            }
+
+    monkeypatch.setattr("lumosai.data.drift.Report", FakeReport)
+    monkeypatch.setattr("lumosai.data.drift.DataDriftPreset", lambda: object())
+    monkeypatch.setattr(settings.data, "drift_share_threshold", 1.0)
+
+    result = drift_report(
+        reference,
+        current,
+        temporal_features=["event_date"],
+        important_features=["glucose", "age"],
+    )
+
+    assert result.metrics["drift/benchmark/important_n_drifted_columns"] == 1.0
+    assert result.metrics["drift/benchmark/important_share_drifted_columns"] == 0.5
+    assert result.metrics["drift/benchmark/important_feature/glucose/drifted"] == 1.0
+    assert result.metrics["drift/benchmark/important_feature/age/drifted"] == 0.0
+    assert result.flagged == [
+        {
+            "comparison": "benchmark",
+            "metric": "important_feature_drift",
+            "feature": "glucose",
+            "importance_rank": 1,
+        }
+    ]
+    assert result.summary["important_features"] == {
+        "features": ["glucose", "age"],
+        "drifted_features": ["glucose"],
+        "n_drifted_columns": 1,
+        "share_drifted_columns": 0.5,
+    }
+
+
+def test_drift_report_important_feature_flags_include_importance_metadata(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    reference = pd.DataFrame({"event_date": ["2026-01-01"], "glucose": [100.0]})
+    current = pd.DataFrame({"event_date": ["2026-01-02"], "glucose": [180.0]})
+
+    class FakeReport:
+        def __init__(self, metrics: list[Any]) -> None:
+            self.metrics = metrics
+
+        def run(
+            self,
+            reference_data: pd.DataFrame,
+            current_data: pd.DataFrame,
+            column_mapping: Any = None,
+        ) -> None:
+            return None
+
+        def as_dict(self) -> dict[str, Any]:
+            return {
+                "metrics": [
+                    {
+                        "result": {
+                            "dataset_drift": False,
+                            "number_of_drifted_columns": 1,
+                            "share_of_drifted_columns": 1.0,
+                            "drift_by_columns": {"glucose": {"drift_detected": True}},
+                        }
+                    }
+                ]
+            }
+
+    monkeypatch.setattr("lumosai.data.drift.Report", FakeReport)
+    monkeypatch.setattr("lumosai.data.drift.DataDriftPreset", lambda: object())
+    monkeypatch.setattr(settings.data, "drift_share_threshold", 1.0)
+    importance = LumosResult(
+        metrics={},
+        summary={
+            "methods": {
+                "permutation": {
+                    "features": [{"feature": "glucose", "importance_mean": 0.9}]
+                }
+            }
+        },
+    )
+
+    result = drift_report(
+        reference,
+        current,
+        temporal_features=["event_date"],
+        importance_result=importance,
+    )
+
+    assert result.flagged == [
+        {
+            "comparison": "benchmark",
+            "metric": "important_feature_drift",
+            "feature": "glucose",
+            "importance_method": "permutation",
+            "importance_rank": 1,
+        }
+    ]
+
+
+def test_drift_report_can_disable_important_feature_flags(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    reference = pd.DataFrame({"event_date": ["2026-01-01"], "glucose": [100.0]})
+    current = pd.DataFrame({"event_date": ["2026-01-02"], "glucose": [180.0]})
+
+    class FakeReport:
+        def __init__(self, metrics: list[Any]) -> None:
+            self.metrics = metrics
+
+        def run(
+            self,
+            reference_data: pd.DataFrame,
+            current_data: pd.DataFrame,
+            column_mapping: Any = None,
+        ) -> None:
+            return None
+
+        def as_dict(self) -> dict[str, Any]:
+            return {
+                "metrics": [
+                    {
+                        "result": {
+                            "dataset_drift": False,
+                            "number_of_drifted_columns": 1,
+                            "share_of_drifted_columns": 1.0,
+                            "drift_by_columns": {"glucose": {"drift_detected": True}},
+                        }
+                    }
+                ]
+            }
+
+    monkeypatch.setattr("lumosai.data.drift.Report", FakeReport)
+    monkeypatch.setattr("lumosai.data.drift.DataDriftPreset", lambda: object())
+    monkeypatch.setattr(settings.data, "drift_share_threshold", 1.0)
+    monkeypatch.setattr(settings.data, "alert_on_important_feature_drift", False)
+
+    result = drift_report(
+        reference,
+        current,
+        temporal_features=["event_date"],
+        important_features=["glucose"],
+    )
+
+    assert result.metrics["drift/benchmark/important_feature/glucose/drifted"] == 1.0
+    assert result.flagged == []
+
+
 @pytest.mark.integration
 def test_drift_report_uses_installed_evidently_api() -> None:
     reference = pd.DataFrame(
