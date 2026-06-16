@@ -114,11 +114,12 @@ result = feature_importance(
     validation_frame,
     target="actual",
     feature_columns=["tenure", "plan_code", "day_of_week"],
+    method="permutation",
     report_name="Holdout Feature Importance",
     experiment_name="model-training",
 )
 
-print(result.summary["features"])
+print(result.summary["methods"]["permutation"]["features"])
 ```
 
 ## Set Shared Defaults

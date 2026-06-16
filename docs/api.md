@@ -408,24 +408,31 @@ feature_importance(
     *,
     target,
     feature_columns,
-    method="permutation",
+    method=None,
     scoring=None,
     n_repeats=5,
     sample_size=None,
     random_state=42,
     report_name=None,
+    include_plots=None,
     experiment_name=None,
 )
 ```
 
 Computes model feature importance after training or evaluation.
 
-- `method="permutation"` is the default and uses scikit-learn permutation importance.
+- `method=None` uses `settings.model.feature_importance_method`, which defaults to `"both"`.
+- `method="both"` runs permutation importance and SHAP mean absolute importance in one result.
+- `method="permutation"` uses scikit-learn permutation importance.
 - `method="shap"` computes SHAP mean absolute importance and requires the optional `lumosai[importance]` dependency.
 - `feature_columns` must contain at least one feature and all features must exist in `data`.
 - `sample_size` optionally samples rows before computing importance.
 - `scoring`, `n_repeats`, and `random_state` apply to permutation importance.
-- Returns metrics under `importance/<feature>` and sorted feature rows in `result.summary["features"]`.
+- `include_plots=None` uses `settings.model.include_feature_importance_plots`, which defaults to `True`.
+- Exports `result.artifacts["html"]` by default with permutation and/or SHAP importance plots.
+- Returns metrics under `importance/<method>/<feature>`.
+- Stores method-specific rows in `result.summary["methods"][method]["features"]`.
+- Keeps `result.summary["features"]` as a convenience alias for permutation rows when available, otherwise SHAP rows.
 - Stores method, feature columns, and optional `report_name` in metadata.
 
 ## Settings
@@ -444,6 +451,11 @@ Relevant sample defaults live under `settings.data`:
 - `sample_artifact_format`: format for suffixless sample artifact paths, either `"parquet"` or `"csv"`.
 - `log_sample_metadata`: default metadata logging behavior for `build_sample()`.
 - `log_sample_artifacts`: default raw sample artifact logging behavior for `build_sample()`.
+
+Relevant model defaults live under `settings.model`:
+
+- `feature_importance_method`: default method for `feature_importance()` when `method=None`; defaults to `"both"`.
+- `include_feature_importance_plots`: default artifact behavior for `feature_importance()` when `include_plots=None`; defaults to `True`.
 
 Settings use nested Pydantic models and environment variables with the `LUMOSAI_` prefix.
 

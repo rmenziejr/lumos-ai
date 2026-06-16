@@ -276,3 +276,44 @@ def drift_fallback_html(*, title: str, summary: dict[str, Any], metadata: dict[s
         + "</tbody></table>"
     )
     return _html_document(title, [("Data Drift Report", table)])
+
+
+def _importance_plot(rows: list[dict[str, Any]], *, title: str, include_error: bool) -> str:
+    ordered = list(reversed(rows[:20]))
+    features = [str(row["feature"]) for row in ordered]
+    means = [float(row["importance_mean"]) for row in ordered]
+    errors = [float(row.get("importance_std", 0.0)) for row in ordered] if include_error else None
+
+    fig_height = max(3.0, 0.35 * len(features) + 1.2)
+    fig, ax = plt.subplots(figsize=(7, fig_height))
+    ax.barh(features, means, xerr=errors)
+    ax.set(xlabel="Mean Importance", title=title)
+    fig.tight_layout()
+    return _figure_html(fig, title)
+
+
+def importance_html(*, title: str, methods: dict[str, dict[str, Any]]) -> str:
+    sections: list[tuple[str, str]] = []
+    if "permutation" in methods:
+        sections.append(
+            (
+                "Permutation Importance",
+                _importance_plot(
+                    methods["permutation"]["features"],
+                    title="Permutation Importance",
+                    include_error=True,
+                ),
+            )
+        )
+    if "shap" in methods:
+        sections.append(
+            (
+                "SHAP Importance",
+                _importance_plot(
+                    methods["shap"]["features"],
+                    title="SHAP Importance",
+                    include_error=False,
+                ),
+            )
+        )
+    return _html_document(title, sections)

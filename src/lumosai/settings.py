@@ -75,6 +75,8 @@ class ModelSettings(BaseModel):
     include_perm_importance: bool = True
     log_shap: bool = True
     shap_sample_size: int = 1000
+    feature_importance_method: Literal["permutation", "shap", "both"] = "both"
+    include_feature_importance_plots: bool = True
 
     @model_validator(mode="before")
     @classmethod

@@ -1,6 +1,14 @@
 # Feature Importance
 
-Use `feature_importance()` after training or evaluation to record model explainability metrics with the same `LumosResult` shape as other reports. The default method is permutation importance, which works with fitted estimators that expose a scikit-learn compatible prediction interface.
+Use `feature_importance()` after training or evaluation to record model explainability metrics with the same `LumosResult` shape as other reports. The default method is `both`, which combines permutation importance and SHAP mean absolute importance because they answer different questions: permutation importance measures global model reliance on each feature, while SHAP starts from local attributions and aggregates them over the sampled rows.
+
+Install the optional importance dependencies before using the default `method="both"` or `method="shap"`:
+
+```bash
+uv sync --extra importance
+```
+
+The default report also writes an HTML artifact with importance plots at `result.artifacts["html"]`.
 
 ## Permutation Importance
 
@@ -20,18 +28,12 @@ importance = feature_importance(
 )
 
 print(importance.metrics)
-print(importance.summary["features"])
+print(importance.summary["methods"]["permutation"]["features"])
 ```
 
-Metrics are logged as `importance/<feature>` and sorted by mean importance in the summary.
+Permutation metrics are logged as `importance/permutation/<feature>` and sorted by mean importance in the summary.
 
 ## SHAP Importance
-
-Install the optional importance dependencies before using `method="shap"`:
-
-```bash
-uv sync --extra importance
-```
 
 ```python
 from lumosai.model import feature_importance
@@ -49,3 +51,28 @@ importance = feature_importance(
 ```
 
 SHAP support requires the optional `lumosai[importance]` dependency when the package is installed from a built distribution.
+
+## Both Methods
+
+```python
+importance = feature_importance(
+    model,
+    validation_frame,
+    target="actual",
+    feature_columns=["tenure", "plan_code", "monthly_spend", "day_of_week"],
+    method="both",
+    sample_size=1000,
+    report_name="Holdout Feature Importance",
+    experiment_name="model-training",
+)
+
+print(importance.metrics["importance/permutation/monthly_spend"])
+print(importance.metrics["importance/shap/monthly_spend"])
+```
+
+Set shared defaults with environment variables:
+
+```bash
+export LUMOSAI_MODEL__FEATURE_IMPORTANCE_METHOD=permutation
+export LUMOSAI_MODEL__INCLUDE_FEATURE_IMPORTANCE_PLOTS=false
+```

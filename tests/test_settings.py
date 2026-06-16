@@ -59,6 +59,23 @@ def test_metric_threshold_defaults_include_metric_direction() -> None:
     )
 
 
+def test_model_importance_settings_defaults() -> None:
+    loaded = Settings()
+
+    assert loaded.model.feature_importance_method == "both"
+    assert loaded.model.include_feature_importance_plots is True
+
+
+def test_model_importance_settings_env_override(monkeypatch: MonkeyPatch) -> None:
+    monkeypatch.setenv("LUMOSAI_MODEL__FEATURE_IMPORTANCE_METHOD", "permutation")
+    monkeypatch.setenv("LUMOSAI_MODEL__INCLUDE_FEATURE_IMPORTANCE_PLOTS", "false")
+
+    loaded = Settings()
+
+    assert loaded.model.feature_importance_method == "permutation"
+    assert loaded.model.include_feature_importance_plots is False
+
+
 def test_data_drift_share_threshold_must_be_share(monkeypatch: MonkeyPatch) -> None:
     monkeypatch.setenv("LUMOSAI_DATA__DRIFT_SHARE_THRESHOLD", "1.5")
 

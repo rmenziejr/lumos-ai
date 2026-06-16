@@ -97,6 +97,7 @@ feature_importance(
     validation_scored,
     target="actual",
     feature_columns=feature_columns,
+    method="permutation",
     report_name="Holdout Feature Importance",
     experiment_name="model-training",
 )
