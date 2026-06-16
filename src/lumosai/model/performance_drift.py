@@ -10,10 +10,15 @@ from lumosai.data.ingest import to_pandas
 from lumosai.data.validation import require_columns
 from lumosai.exceptions import LumosValidationError
 from lumosai.mlflow import log_result
-from lumosai.model.metrics import MetricThreshold, TaskType
-from lumosai.model.scores import ScoreInput, safe_label
+from lumosai.model.metrics import TaskType, compare_metric, detect_task_type, get_metrics
+from lumosai.model.scores import (
+    ClassificationScores,
+    ScoreInput,
+    normalize_classification_scores,
+    safe_label,
+)
 from lumosai.results import LumosResult
-from lumosai.settings import settings
+from lumosai.settings import MetricThreshold, settings
 
 _PSI_EPSILON = 1e-6
 
@@ -73,6 +78,47 @@ def _score_columns(
     require_columns(baseline, [prediction_score])
     require_columns(current, [prediction_score])
     return {"score": (baseline[prediction_score], current[prediction_score])}
+
+
+def _score_columns_from_normalized(
+    baseline_scores: ClassificationScores,
+    current_scores: ClassificationScores,
+) -> dict[str, tuple[np.ndarray, np.ndarray]]:
+    if baseline_scores.labels != current_scores.labels:
+        msg = "baseline and current score labels must match"
+        raise LumosValidationError(msg)
+    if baseline_scores.positive_label is not None:
+        index = baseline_scores.label_index(baseline_scores.positive_label)
+        return {"score": (baseline_scores.values[:, index], current_scores.values[:, index])}
+    return {
+        safe_label(label): (
+            baseline_scores.values[:, baseline_scores.label_index(label)],
+            current_scores.values[:, current_scores.label_index(label)],
+        )
+        for label in baseline_scores.labels
+    }
+
+
+def _classification_residuals(
+    frame: pd.DataFrame,
+    *,
+    target: str,
+    scores: ClassificationScores,
+) -> np.ndarray:
+    if scores.positive_label is not None:
+        index = scores.label_index(scores.positive_label)
+        actual = (frame[target] == scores.positive_label).to_numpy(dtype=float)
+        return actual - scores.values[:, index]
+
+    residuals: list[float] = []
+    for row_index, actual_label in enumerate(frame[target]):
+        class_index = scores.label_index(actual_label)
+        residuals.append(1.0 - float(scores.values[row_index, class_index]))
+    return np.asarray(residuals, dtype=float)
+
+
+def _regression_residuals(frame: pd.DataFrame, *, target: str, prediction: str) -> np.ndarray:
+    return frame[target].to_numpy(dtype=float) - frame[prediction].to_numpy(dtype=float)
 
 
 def _validate_signals(
@@ -144,8 +190,97 @@ def performance_drift_report(
     if report_name is not None:
         metadata["report_name"] = report_name
 
+    baseline_scores: ClassificationScores | None = None
+    current_scores: ClassificationScores | None = None
+    resolved_task: TaskType | None = task_type
+    if target is not None and prediction is not None:
+        require_columns(baseline_pd, [target, prediction])
+        require_columns(current_pd, [target, prediction])
+        resolved_task = task_type or detect_task_type(baseline_pd[target], baseline_pd[prediction])
+        if prediction_score is not None and resolved_task == "classification":
+            baseline_scores = normalize_classification_scores(
+                baseline_pd,
+                target=target,
+                prediction=prediction,
+                prediction_score=prediction_score,
+                score_labels=score_labels,
+            )
+            current_scores = normalize_classification_scores(
+                current_pd,
+                target=target,
+                prediction=prediction,
+                prediction_score=prediction_score,
+                score_labels=score_labels,
+            )
+            metadata.update(current_scores.metadata())
+        baseline_raw_metrics = get_metrics(
+            baseline_pd[target],
+            baseline_pd[prediction],
+            y_score=baseline_scores.values if baseline_scores is not None else None,
+            score_labels=baseline_scores.labels if baseline_scores is not None else None,
+            task_type=resolved_task,
+        )
+        current_raw_metrics = get_metrics(
+            current_pd[target],
+            current_pd[prediction],
+            y_score=current_scores.values if current_scores is not None else None,
+            score_labels=current_scores.labels if current_scores is not None else None,
+            task_type=resolved_task,
+        )
+        metric_summary: dict[str, Any] = {}
+        thresholds = {**settings.model.metric_thresholds, **(metric_thresholds or {})}
+        for metric_name in sorted(set(baseline_raw_metrics) & set(current_raw_metrics)):
+            baseline_value = baseline_raw_metrics[metric_name]
+            current_value = current_raw_metrics[metric_name]
+            comparison_result = compare_metric(
+                metric_name,
+                group_value=current_value,
+                best_value=baseline_value,
+                threshold=thresholds.get(metric_name),
+            )
+            metrics[f"performance_drift/{safe_comparison}/baseline/{metric_name}"] = (
+                baseline_value
+            )
+            metrics[f"performance_drift/{safe_comparison}/current/{metric_name}"] = (
+                current_value
+            )
+            metrics[f"performance_drift/{safe_comparison}/delta/{metric_name}"] = float(
+                comparison_result["diff"]
+            )
+            metrics[f"performance_drift/{safe_comparison}/ratio/{metric_name}"] = float(
+                comparison_result["ratio"]
+            )
+            metric_summary[metric_name] = {
+                "baseline": baseline_value,
+                "current": current_value,
+                "delta": comparison_result["diff"],
+                "ratio": comparison_result["ratio"],
+                "comparison_mode": comparison_result["comparison_mode"],
+                "threshold": comparison_result["threshold"],
+                "flagged": comparison_result["flagged"],
+            }
+            if comparison_result["flagged"]:
+                flagged.append(
+                    {
+                        "comparison": safe_comparison,
+                        "metric": "metric_drift",
+                        "performance_metric": metric_name,
+                        "baseline": baseline_value,
+                        "current": current_value,
+                        "delta": comparison_result["diff"],
+                        "ratio": comparison_result["ratio"],
+                        "threshold": comparison_result["threshold"],
+                        "comparison_mode": comparison_result["comparison_mode"],
+                    }
+                )
+        summary["metrics"] = metric_summary
+
     if prediction_score is not None:
-        score_columns = _score_columns(baseline_pd, current_pd, prediction_score)
+        score_columns = (
+            _score_columns_from_normalized(baseline_scores, current_scores)
+            if baseline_scores is not None and current_scores is not None
+            else _score_columns(baseline_pd, current_pd, prediction_score)
+        )
         score_summary: dict[str, Any] = {"columns": list(score_columns)}
         for key, (baseline_score, current_score) in score_columns.items():
             value = _psi(baseline_score, current_score)
@@ -166,6 +301,54 @@ def performance_drift_report(
                     }
                 )
         summary["score"] = score_summary
+
+    if target is not None and prediction is not None and resolved_task is not None:
+        if (
+            resolved_task == "classification"
+            and baseline_scores is not None
+            and current_scores is not None
+        ):
+            baseline_residual = _classification_residuals(
+                baseline_pd,
+                target=target,
+                scores=baseline_scores,
+            )
+            current_residual = _classification_residuals(
+                current_pd,
+                target=target,
+                scores=current_scores,
+            )
+            residual_kind = "classification_probability"
+        elif resolved_task == "regression":
+            baseline_residual = _regression_residuals(
+                baseline_pd,
+                target=target,
+                prediction=prediction,
+            )
+            current_residual = _regression_residuals(
+                current_pd,
+                target=target,
+                prediction=prediction,
+            )
+            residual_kind = "regression"
+        else:
+            baseline_residual = None
+            current_residual = None
+            residual_kind = None
+
+        if baseline_residual is not None and current_residual is not None:
+            residual_psi = _psi(baseline_residual, current_residual)
+            metrics[f"performance_drift/{safe_comparison}/residual_psi"] = residual_psi
+            summary["residual"] = {"kind": residual_kind, "psi": residual_psi}
+            if residual_psi > resolved_psi_threshold:
+                flagged.append(
+                    {
+                        "comparison": safe_comparison,
+                        "metric": "residual_psi",
+                        "value": residual_psi,
+                        "threshold": resolved_psi_threshold,
+                    }
+                )
 
     result = LumosResult(
         metrics=metrics,
