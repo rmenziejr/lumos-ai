@@ -402,6 +402,33 @@ def test_drift_report_records_explicit_important_features(
     assert result.metadata["important_feature_source"] == "explicit"
 
 
+def test_drift_report_explicit_important_features_take_precedence(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    _aggregate_only_report(monkeypatch)
+    reference = pd.DataFrame({"event_date": ["2026-01-01"], "x": [1.0], "y": [2.0]})
+    current = pd.DataFrame({"event_date": ["2026-01-02"], "x": [1.5], "y": [2.5]})
+    importance = LumosResult(
+        metrics={},
+        summary={
+            "methods": {
+                "shap": {"features": [{"feature": "x", "importance_mean": 0.9}]}
+            }
+        },
+    )
+
+    result = drift_report(
+        reference,
+        current,
+        temporal_features=["event_date"],
+        important_features=["y"],
+        importance_result=importance,
+    )
+
+    assert result.metadata["important_features"] == ["y"]
+    assert result.metadata["important_feature_source"] == "explicit"
+
+
 def test_drift_report_rejects_importance_result_without_permutation_rows(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
@@ -635,6 +662,27 @@ def test_drift_report_can_disable_important_feature_flags(
     )
 
     assert result.metrics["drift/benchmark/important_feature/glucose/drifted"] == 1.0
+    assert result.flagged == []
+
+
+def test_drift_report_defaults_important_feature_metrics_to_no_drift_without_column_details(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    _aggregate_only_report(monkeypatch)
+    reference = pd.DataFrame({"event_date": ["2026-01-01"], "x": [1.0], "y": [2.0]})
+    current = pd.DataFrame({"event_date": ["2026-01-02"], "x": [1.5], "y": [2.5]})
+
+    result = drift_report(
+        reference,
+        current,
+        temporal_features=["event_date"],
+        important_features=["x", "y"],
+    )
+
+    assert result.metrics["drift/benchmark/important_n_drifted_columns"] == 0.0
+    assert result.metrics["drift/benchmark/important_share_drifted_columns"] == 0.0
+    assert result.metrics["drift/benchmark/important_feature/x/drifted"] == 0.0
+    assert result.metrics["drift/benchmark/important_feature/y/drifted"] == 0.0
     assert result.flagged == []
 
 
