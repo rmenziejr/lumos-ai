@@ -115,7 +115,10 @@ def _importance_feature_rows(importance_result: LumosResult) -> list[dict[str, A
         raise LumosValidationError(msg)
     rows = permutation.get("features")
     if not isinstance(rows, list):
-        msg = "importance_result must include permutation rows in summary['methods']['permutation']['features']"
+        msg = (
+            "importance_result must include permutation rows in "
+            "summary['methods']['permutation']['features']"
+        )
         raise LumosValidationError(msg)
     return rows
 
