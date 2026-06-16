@@ -6,7 +6,7 @@ from typing import Any
 
 import pandas as pd
 
-from lumosai.artifacts import artifact_workspace
+from lumosai.artifacts import artifact_workspace, local_html_artifact_path
 from lumosai.data.ingest import to_pandas
 from lumosai.data.validation import require_columns
 from lumosai.exceptions import LumosOptionalDependencyError, LumosValidationError
@@ -177,12 +177,18 @@ def profile(
         logging_requested = resolve_experiment_name(experiment_name) is not None
         keep_local = not logging_requested or not settings.mlflow.log_artifacts
         with artifact_workspace(keep_local=keep_local) as workspace:
-            html_path = workspace / "profile.html"
+            html_path = local_html_artifact_path(
+                workspace,
+                "profile.html",
+                report_name=report_name,
+            )
             report.to_file(html_path)
             if keep_local:
                 artifacts["html"] = str(html_path)
             else:
-                artifacts["html"] = {"mlflow_artifact_path": "profile/profile.html"}
+                artifacts["html"] = {
+                    "mlflow_artifact_path": f"profile/{html_path.name}"
+                }
             result = LumosResult(
                 summary={
                     "rows": len(profiled),

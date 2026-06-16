@@ -68,6 +68,44 @@ def test_calibration_report_creates_default_html_artifact(
     assert "Observed Rate" in html
 
 
+def test_calibration_report_retains_distinct_local_html_artifacts(
+    monkeypatch: pytest.MonkeyPatch,
+    tmp_path: Path,
+) -> None:
+    monkeypatch.setattr(settings.artifacts, "local_dir", tmp_path)
+    df = pd.DataFrame(
+        {
+            "actual": [0, 0, 1, 1],
+            "raw_score": [0.2, 0.3, 0.8, 0.9],
+            "calibrated_score": [0.1, 0.4, 0.7, 0.8],
+        }
+    )
+
+    raw = calibration_report(
+        df,
+        target="actual",
+        prediction_score="raw_score",
+        score_labels=[0, 1],
+        n_bins=2,
+        report_name="Raw Calibration",
+    )
+    calibrated = calibration_report(
+        df,
+        target="actual",
+        prediction_score="calibrated_score",
+        score_labels=[0, 1],
+        n_bins=2,
+        report_name="Post Calibration",
+    )
+
+    raw_path = Path(raw.artifacts["html"])
+    calibrated_path = Path(calibrated.artifacts["html"])
+
+    assert raw_path != calibrated_path
+    assert "Raw Calibration" in raw_path.read_text(encoding="utf-8")
+    assert "Post Calibration" in calibrated_path.read_text(encoding="utf-8")
+
+
 def test_calibration_report_binary_infers_positive_label() -> None:
     df = pd.DataFrame(
         {

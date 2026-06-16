@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import re
 from collections.abc import Iterator
 from contextlib import contextmanager
 from pathlib import Path
@@ -37,6 +38,30 @@ def should_keep_html_artifact(
 
     logging_requested = resolve_experiment_name(experiment_name, loaded_settings) is not None
     return not logging_requested or not loaded_settings.mlflow.log_artifacts
+
+
+def _safe_artifact_stem(value: str) -> str:
+    stem = re.sub(r"[^A-Za-z0-9._-]+", "-", value.strip().lower()).strip("-._")
+    return stem or "report"
+
+
+def local_html_artifact_path(
+    workspace: Path,
+    default_filename: str,
+    *,
+    report_name: str | None = None,
+) -> Path:
+    """Return a local HTML path that will not overwrite an existing report."""
+    default_path = Path(default_filename)
+    suffix = default_path.suffix or ".html"
+    default_stem = default_path.stem or "report"
+    stem = _safe_artifact_stem(report_name) if report_name else default_stem
+    candidate = workspace / f"{stem}{suffix}"
+    index = 2
+    while candidate.exists():
+        candidate = workspace / f"{stem}-{index}{suffix}"
+        index += 1
+    return candidate
 
 
 def html_artifact_metadata(

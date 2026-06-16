@@ -10,6 +10,7 @@ from sklearn.inspection import permutation_importance  # type: ignore[import-unt
 from lumosai.artifacts import (
     artifact_workspace,
     html_artifact_metadata,
+    local_html_artifact_path,
     log_result_with_html_artifact,
     should_keep_html_artifact,
 )
@@ -195,7 +196,11 @@ def feature_importance(
         title = report_name or "Feature Importance Report"
         keep_local = should_keep_html_artifact(experiment_name=experiment_name)
         with artifact_workspace(keep_local=keep_local) as workspace:
-            html_path = workspace / "feature_importance_report.html"
+            html_path = local_html_artifact_path(
+                workspace,
+                "feature_importance_report.html",
+                report_name=report_name,
+            )
             html_path.write_text(
                 importance_html(title=title, methods=methods),
                 encoding="utf-8",

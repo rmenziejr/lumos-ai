@@ -13,6 +13,7 @@ import pandas as pd
 from lumosai.artifacts import (
     artifact_workspace,
     html_artifact_metadata,
+    local_html_artifact_path,
     log_result_with_html_artifact,
     should_keep_html_artifact,
 )
@@ -603,7 +604,11 @@ def drift_report(
         title = report_name or "Data Drift Report"
         keep_local = should_keep_html_artifact(experiment_name=experiment_name)
         with artifact_workspace(keep_local=keep_local) as workspace:
-            html_path = workspace / "drift_report.html"
+            html_path = local_html_artifact_path(
+                workspace,
+                "drift_report.html",
+                report_name=report_name,
+            )
             _write_drift_html(
                 report=report,
                 run_result=run_result,
