@@ -1,7 +1,11 @@
-# lumosai
+# lumos-ai
 
-`lumosai` is an opinionated Python package for ML monitoring and reporting.
+`lumos-ai` is an opinionated Python package for ML monitoring and reporting.
 It provides simple function-first APIs for profiling, drift, performance, and bias checks while returning structured results and optionally logging to MLflow.
+
+The name comes from "lumos," the idea of lighting up what is usually hidden inside an ML workflow. The package is meant to make model behavior, data movement, drift, calibration, and monitoring signals easier to see before they become production surprises.
+
+The Python distribution and import module are still named `lumosai`, so code examples use `import lumosai` and extras such as `lumosai[mlflow]`.
 
 ## Recipes
 

@@ -1,7 +1,11 @@
-# lumosai Documentation
+# lumos-ai Documentation
 
-`lumosai` is a function-first Python package for ML monitoring and reporting.
+`lumos-ai` is a function-first Python package for ML monitoring and reporting.
 It provides helpers for dataset profiling, data drift, model performance, and bias checks while returning structured `LumosResult` objects.
+
+The name is a nod to making ML systems easier to inspect. `lumos-ai` is built to illuminate the parts of the workflow that are easy to miss: dataset quality, drift against a benchmark, model performance, calibration, bias slices, and the reporting trail around each pipeline run.
+
+The installed Python package and import path remain `lumosai`, so code examples use `from lumosai...`.
 
 ## Start Here
 

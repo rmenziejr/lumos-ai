@@ -1,7 +1,7 @@
 # Full Pima Walkthrough
 
 The full example notebook uses the Pima Indians Diabetes dataset to walk through a
-complete local `lumosai` workflow:
+complete local `lumos-ai` workflow:
 
 - raw and preprocessed data profiling;
 - representative train and holdout samples;

@@ -1,10 +1,10 @@
 # Ongoing Monitoring Pipeline
 
-`lumosai` evaluates the frames passed to it. It does not schedule jobs, build monitoring windows, join late labels, or own orchestration.
+`lumos-ai` evaluates the frames passed to it. It does not schedule jobs, build monitoring windows, join late labels, or own orchestration.
 
 For each production window, run data drift. Run performance when labels are available. Run bias when labels and permitted protected attributes are available.
 Install `lumosai[mlflow]` before passing `experiment_name` or setting `LUMOSAI_MLFLOW__DEFAULT_EXPERIMENT_NAME`. Results stay local only when neither is configured.
-To keep a scheduled execution in one MLflow run, start the run before calling `lumosai`.
+To keep a scheduled execution in one MLflow run, start the run before calling `lumos-ai`.
 
 ```python
 import mlflow

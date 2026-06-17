@@ -1,5 +1,5 @@
-site_name: lumosai
-site_description: Opinionated ML monitoring and reporting helpers.
+site_name: lumos-ai
+site_description: Function-first ML monitoring and reporting helpers.
 repo_url: https://github.com/rmenziejr/lumos-ai
 theme:
   name: material

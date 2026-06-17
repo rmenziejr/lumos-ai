@@ -75,7 +75,7 @@ with mlflow.start_run(run_name="optuna-study"):
     mlflow.log_metric("best_validation_f1", study.best_value)
 ```
 
-When `experiment_name` is passed and an MLflow run is already active, `lumosai` logs into that active run. The nested trial run therefore receives the `performance/...` metrics and result artifact for that trial.
+When `experiment_name` is passed and an MLflow run is already active, `lumos-ai` logs into that active run. The nested trial run therefore receives the `performance/...` metrics and result artifact for that trial.
 
 ## Add Fold-Level Reports
 

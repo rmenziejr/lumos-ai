@@ -1,6 +1,6 @@
 # Pipeline Patterns
 
-`lumosai` is a reporting SDK. The orchestrator owns scheduling, joins, storage, retries, credentials, and promotion rules. Pass prepared dataframes to `lumosai` at the points where you want profiling, drift, performance, bias, sample, or importance results.
+`lumos-ai` is a reporting SDK. The orchestrator owns scheduling, joins, storage, retries, credentials, and promotion rules. Pass prepared dataframes to `lumos-ai` at the points where you want profiling, drift, performance, bias, sample, or importance results.
 
 Use the low-level primitives directly while developing, debugging, testing, or building custom pipeline steps. They make each report boundary explicit and are easy to unit test. When the monitoring flow is stable enough for scheduled production runs, promote the same prepared inputs to `monitoring_report()` so sampling, drift, optional performance, optional bias, fail-fast validation, result grouping, and MLflow bundle logging happen consistently.
 
@@ -32,7 +32,7 @@ profile(
 )
 ```
 
-The pipeline still owns where the full feature table and sampled artifact are stored. `lumosai` records the report output and sample metadata.
+The pipeline still owns where the full feature table and sampled artifact are stored. `lumos-ai` records the report output and sample metadata.
 
 ## Training Pipeline
 
