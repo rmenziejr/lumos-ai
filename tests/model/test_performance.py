@@ -33,6 +33,7 @@ def test_performance_report_returns_namespaced_metrics() -> None:
     assert isinstance(result, LumosResult)
     assert result.metrics["performance/accuracy"] == 1.0
     assert result.metrics["performance/roc_auc"] == 1.0
+    assert result.metrics["performance/pr_auc"] == 1.0
     assert result.metadata["report_type"] == "performance"
     assert result.metadata["task_type"] == "classification"
 

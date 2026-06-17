@@ -312,7 +312,7 @@ get_metrics(
 Computes classification or regression metrics.
 
 - Auto-detects task type when not provided.
-- Supports classification metrics such as accuracy, precision, recall, F1, ROC AUC, and log loss when probability-like scores are supplied.
+- Supports classification metrics such as accuracy, precision, recall, F1, ROC AUC, PR AUC, and log loss when probability-like scores are supplied.
 - `score_labels` defines probability order for binary or multiclass scores. For 1D binary scores, the score is interpreted as the probability of `score_labels[-1]`.
 - Supports regression metrics such as MAE, RMSE, and R2.
 
@@ -343,7 +343,7 @@ Computes current-window model performance.
 - `prediction_score` is an optional score/probability column, a column of probability arrays, or a mapping of labels to probability columns.
 - `score_labels` defines probability order for binary or multiclass arrays. Pass `list(model.classes_)` for sklearn-style classifiers.
 - When multiclass array scores omit `score_labels`, labels are inferred by sorting observed target/prediction labels and warning metadata is recorded.
-- Classification reports include log loss when probability-like scores are supplied.
+- Classification reports include ROC AUC and PR AUC when scores are supplied, plus log loss when probability-like scores are supplied.
 - Pass `include_lift=True` to add decile lift metrics under `performance/lift/<class>/...`.
 - Exports `result.artifacts["html"]` by default with common diagnostics: confusion matrix, ROC, PR, and lift plots for scored classification reports; predicted-vs-actual and residual plots for regression reports.
 - Returns namespaced metrics under `performance/...`.

@@ -71,7 +71,9 @@ class ModelSettings(BaseModel):
     classification_metrics: list[str] = Field(
         default_factory=lambda: ["accuracy", "precision", "recall", "f1"]
     )
-    classification_probability_metrics: list[str] = Field(default_factory=lambda: ["roc_auc"])
+    classification_probability_metrics: list[str] = Field(
+        default_factory=lambda: ["roc_auc", "pr_auc"]
+    )
     regression_metrics: list[str] = Field(default_factory=lambda: ["mae", "rmse", "r2"])
     metric_thresholds: dict[str, MetricThreshold] = Field(default_factory=default_metric_thresholds)
     include_perm_importance: bool = True

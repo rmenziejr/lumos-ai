@@ -66,6 +66,12 @@ def test_model_importance_settings_defaults() -> None:
     assert loaded.model.include_feature_importance_plots is True
 
 
+def test_model_probability_metric_settings_defaults() -> None:
+    loaded = Settings()
+
+    assert loaded.model.classification_probability_metrics == ["roc_auc", "pr_auc"]
+
+
 def test_model_importance_settings_env_override(monkeypatch: MonkeyPatch) -> None:
     monkeypatch.setenv("LUMOSAI_MODEL__FEATURE_IMPORTANCE_METHOD", "permutation")
     monkeypatch.setenv("LUMOSAI_MODEL__INCLUDE_FEATURE_IMPORTANCE_PLOTS", "false")

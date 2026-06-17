@@ -3,7 +3,7 @@ from __future__ import annotations
 import numpy as np
 import pandas as pd
 import pytest
-from sklearn.metrics import log_loss
+from sklearn.metrics import average_precision_score, log_loss
 
 from lumosai.model.metrics import compare_metric, detect_task_type, get_metrics
 from lumosai.model.validation import validate_prediction_frame
@@ -34,6 +34,7 @@ def test_get_metrics_classification_uses_scores_for_roc_auc() -> None:
     assert metrics["recall"] == 1.0
     assert metrics["f1"] == 1.0
     assert metrics["roc_auc"] == 1.0
+    assert metrics["pr_auc"] == 1.0
 
 
 def test_get_metrics_classification_handles_string_labels() -> None:
@@ -65,6 +66,7 @@ def test_get_metrics_multiclass_classification_uses_probability_matrix_for_roc_a
     )
 
     assert metrics["roc_auc"] == pytest.approx(1.0)
+    assert metrics["pr_auc"] == pytest.approx(1.0)
 
 
 def test_get_metrics_multiclass_roc_auc_without_score_labels_uses_sorted_score_order() -> None:
@@ -83,6 +85,7 @@ def test_get_metrics_multiclass_roc_auc_without_score_labels_uses_sorted_score_o
     )
 
     assert metrics["roc_auc"] == pytest.approx(1.0)
+    assert metrics["pr_auc"] == pytest.approx(1.0)
 
 
 def test_get_metrics_binary_roc_auc_uses_reversed_score_labels_for_2d_scores() -> None:
@@ -98,6 +101,7 @@ def test_get_metrics_binary_roc_auc_uses_reversed_score_labels_for_2d_scores() -
     )
 
     assert metrics["roc_auc"] == pytest.approx(1.0)
+    assert metrics["pr_auc"] == pytest.approx(1.0)
     assert metrics["log_loss"] == pytest.approx(
         log_loss(y_true, y_score[:, [1, 0]], labels=["no", "yes"])
     )
@@ -115,6 +119,7 @@ def test_get_metrics_binary_roc_auc_uses_score_labels_for_1d_scores() -> None:
     )
 
     assert metrics["roc_auc"] == pytest.approx(1.0)
+    assert metrics["pr_auc"] == pytest.approx(1.0)
     assert metrics["log_loss"] == pytest.approx(
         log_loss(
             y_true,
@@ -133,6 +138,7 @@ def test_get_metrics_skips_log_loss_for_1d_decision_scores_outside_probability_r
     )
 
     assert metrics["roc_auc"] == pytest.approx(1.0)
+    assert metrics["pr_auc"] == pytest.approx(1.0)
     assert "log_loss" not in metrics
 
 
@@ -146,6 +152,7 @@ def test_get_metrics_mixed_explicit_score_labels_do_not_raise_raw_type_error() -
     )
 
     assert metrics["roc_auc"] == pytest.approx(1.0)
+    assert metrics["pr_auc"] == pytest.approx(1.0)
     assert "log_loss" not in metrics
 
 
@@ -189,6 +196,12 @@ def test_get_metrics_adds_log_loss_for_multiclass_probability_matrix() -> None:
     assert metrics["log_loss"] == pytest.approx(
         log_loss(y_true, score_in_sklearn_order, labels=["bronze", "gold", "silver"])
     )
+    expected_pr_auc = average_precision_score(
+        pd.get_dummies(y_true)[["bronze", "gold", "silver"]],
+        score_in_sklearn_order,
+        average="weighted",
+    )
+    assert metrics["pr_auc"] == pytest.approx(expected_pr_auc)
     assert "roc_auc" in metrics
 
 

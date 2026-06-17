@@ -7,6 +7,7 @@ import numpy as np
 import pandas as pd
 from sklearn.metrics import (  # type: ignore[import-untyped]
     accuracy_score,
+    average_precision_score,
     f1_score,
     log_loss,
     mean_absolute_error,
@@ -66,6 +67,7 @@ def get_metrics(
         )
         if y_score is not None:
             metrics["roc_auc"] = _roc_auc(y_true, y_score, score_labels)
+            metrics["pr_auc"] = _pr_auc(y_true, y_score, score_labels)
             log_loss_value = _log_loss(y_true, y_score, score_labels)
             if log_loss_value is not None:
                 metrics["log_loss"] = log_loss_value
@@ -140,7 +142,47 @@ def _log_loss(
     except (TypeError, ValueError):
         if labels_are_sortable:
             raise
-        return None
+    return None
+
+
+def _pr_auc(
+    y_true: Sequence[Any] | pd.Series,
+    y_score: Sequence[Any] | pd.Series,
+    score_labels: Sequence[Any] | None = None,
+) -> float:
+    true_labels = _unique_true_labels(y_true)
+    score_labels_list = list(score_labels) if score_labels is not None else None
+    labels = score_labels_list or true_labels
+    score_array = np.asarray(y_score)
+    if len(labels) <= 2:
+        if score_array.ndim == 2:
+            if score_array.shape[1] != 2:
+                msg = "binary y_score must be one-dimensional or have two probability columns"
+                raise ValueError(msg)
+            score_array = _binary_roc_auc_scores(score_array, score_labels)
+        elif score_array.ndim == 1:
+            score_array = _binary_roc_auc_1d_scores(score_array, true_labels, score_labels)
+        positive_label = _positive_label(true_labels)
+        events = (pd.Series(y_true) == positive_label).to_numpy(dtype=int)
+        return float(average_precision_score(events, score_array))
+
+    if score_labels is None:
+        ordered_labels, labels_are_sortable = _sklearn_label_order(labels)
+        if not labels_are_sortable:
+            ordered_labels = labels
+        ordered_scores = score_array
+    else:
+        ordered_labels, ordered_scores, _ = _scores_in_sklearn_label_order(score_array, labels)
+    events = pd.get_dummies(pd.Series(y_true)).reindex(columns=ordered_labels, fill_value=0)
+    return float(average_precision_score(events, ordered_scores, average="weighted"))
+
+
+def _positive_label(
+    labels: Sequence[Any],
+) -> Any:
+    label_list = list(labels)
+    ordered_labels, labels_are_sortable = _sklearn_label_order(label_list)
+    return ordered_labels[-1] if labels_are_sortable else label_list[-1]
 
 
 def _unique_true_labels(y_true: Sequence[Any] | pd.Series) -> list[Any]:
