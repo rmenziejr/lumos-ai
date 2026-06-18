@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+from html import escape
 from pathlib import Path
 from typing import Any
 
@@ -29,13 +30,31 @@ def _display(value: Any) -> None:
     display(value)
 
 
-def _iframe(src: str, *, width: str | int, height: int) -> Any:
+def _html(value: str) -> Any:
     try:
-        from IPython.display import IFrame  # type: ignore[import-untyped]
+        from IPython.display import HTML  # type: ignore[import-untyped]
     except ImportError as exc:
         msg = "notebook display requires IPython"
         raise LumosOptionalDependencyError(msg) from exc
-    return IFrame(src=src, width=width, height=height)
+    return HTML(value)
+
+
+def _html_iframe_srcdoc(html_path: Path, *, width: str | int, height: int) -> Any:
+    escaped_html = escape(html_path.read_text(encoding="utf-8"), quote=True)
+    escaped_width = escape(str(width), quote=True)
+    return _html(
+        "\n".join(
+            [
+                "<iframe",
+                f'    width="{escaped_width}"',
+                f'    height="{height}"',
+                f'    srcdoc="{escaped_html}"',
+                '    frameborder="0"',
+                "    allowfullscreen",
+                "></iframe>",
+            ]
+        )
+    )
 
 
 def _native_display_object(report: Any) -> tuple[bool, Any | None]:
@@ -87,7 +106,7 @@ def display_report(
 
     html_artifact = result.artifacts.get("html")
     if isinstance(html_artifact, str) and Path(html_artifact).exists():
-        rendered = _iframe(html_artifact, width=width, height=height)
+        rendered = _html_iframe_srcdoc(Path(html_artifact), width=width, height=height)
         _display(rendered)
         return rendered
 

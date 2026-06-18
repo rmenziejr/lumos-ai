@@ -77,7 +77,7 @@ def test_display_report_stops_after_side_effect_notebook_iframe(
     assert displayed == []
 
 
-def test_display_report_uses_iframe_for_local_html_artifact(
+def test_display_report_embeds_local_html_artifact_as_srcdoc_iframe(
     monkeypatch: pytest.MonkeyPatch,
     tmp_path: Path,
 ) -> None:
@@ -85,20 +85,9 @@ def test_display_report_uses_iframe_for_local_html_artifact(
 
     displayed: list[Any] = []
     html_path = tmp_path / "report.html"
-    html_path.write_text("<html><body>report</body></html>", encoding="utf-8")
-
-    class FakeIFrame:
-        def __init__(self, src: str, width: str | int, height: int) -> None:
-            self.src = src
-            self.width = width
-            self.height = height
+    html_path.write_text("<html><body><h1>Report</h1></body></html>", encoding="utf-8")
 
     monkeypatch.setattr(notebook, "_display", displayed.append)
-    monkeypatch.setattr(
-        notebook,
-        "_iframe",
-        lambda src, *, width, height: FakeIFrame(src=src, width=width, height=height),
-    )
 
     returned = notebook.display_report(
         LumosResult(artifacts={"html": str(html_path)}),
@@ -107,8 +96,13 @@ def test_display_report_uses_iframe_for_local_html_artifact(
     )
 
     assert returned is displayed[-1]
-    assert returned.src == str(html_path)
-    assert returned.height == 640
+    assert returned.__class__.__name__ == "HTML"
+    assert (
+        'srcdoc="&lt;html&gt;&lt;body&gt;&lt;h1&gt;Report&lt;/h1&gt;&lt;/body&gt;&lt;/html&gt;"'
+        in returned.data
+    )
+    assert 'height="640"' in returned.data
+    assert "src=" not in returned.data
 
 
 def test_display_report_falls_back_to_iframe_when_native_display_dependency_missing(
@@ -125,25 +119,15 @@ def test_display_report_falls_back_to_iframe_when_native_display_dependency_miss
         def to_notebook_iframe(self) -> object:
             raise ModuleNotFoundError("No module named 'ipywidgets'")
 
-    class FakeIFrame:
-        def __init__(self, src: str, width: str | int, height: int) -> None:
-            self.src = src
-            self.width = width
-            self.height = height
-
     monkeypatch.setattr(notebook, "_display", displayed.append)
-    monkeypatch.setattr(
-        notebook,
-        "_iframe",
-        lambda src, *, width, height: FakeIFrame(src=src, width=width, height=height),
-    )
 
     returned = notebook.display_report(
         LumosResult(report=NativeReport(), artifacts={"html": str(html_path)})
     )
 
     assert returned is displayed[-1]
-    assert returned.src == str(html_path)
+    assert returned.__class__.__name__ == "HTML"
+    assert "srcdoc=" in returned.data
 
 
 def test_display_report_displays_artifact_metadata_when_no_local_html(
