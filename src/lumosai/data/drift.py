@@ -485,7 +485,7 @@ def _write_drift_html(
                     export_errors.append(str(str_exc))
             except Exception as exc:
                 export_errors.append(str(exc))
-        for method_name in ("as_html", "to_html", "html"):
+        for method_name in ("as_html", "to_html", "html", "_repr_html_"):
             method = getattr(source, method_name, None)
             if method is None:
                 continue

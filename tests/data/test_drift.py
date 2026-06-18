@@ -123,6 +123,55 @@ def test_drift_report_saves_native_evidently_html(
     assert "html_export_warning" not in result.metadata
 
 
+def test_drift_report_saves_native_repr_html_when_export_methods_are_unavailable(
+    monkeypatch: pytest.MonkeyPatch,
+    tmp_path: Path,
+) -> None:
+    monkeypatch.setattr(settings.artifacts, "local_dir", tmp_path)
+    reference = pd.DataFrame({"event_date": ["2026-01-01"], "x": [1.0]})
+    current = pd.DataFrame({"event_date": ["2026-01-02"], "x": [10.0]})
+
+    class FakeRunResult:
+        def as_dict(self) -> dict[str, Any]:
+            return {
+                "metrics": [
+                    {
+                        "result": {
+                            "dataset_drift": True,
+                            "number_of_drifted_columns": 1,
+                            "share_of_drifted_columns": 1.0,
+                        }
+                    }
+                ]
+            }
+
+        def _repr_html_(self) -> str:
+            return "<div>native evidently repr</div>"
+
+    class FakeReport:
+        def __init__(self, metrics: list[Any]) -> None:
+            self.metrics = metrics
+
+        def run(
+            self,
+            reference_data: pd.DataFrame,
+            current_data: pd.DataFrame,
+            column_mapping: Any = None,
+        ) -> FakeRunResult:
+            return FakeRunResult()
+
+    monkeypatch.setattr("lumosai.data.drift.Report", FakeReport)
+    monkeypatch.setattr("lumosai.data.drift.DataDriftPreset", lambda: object())
+
+    result = drift_report(reference, current, temporal_features=["event_date"])
+
+    html_path = Path(result.artifacts["html"])
+    html = html_path.read_text(encoding="utf-8")
+    assert html_path.exists()
+    assert "native evidently repr" in html
+    assert "html_export_warning" not in result.metadata
+
+
 def test_drift_report_excludes_temporal_features(monkeypatch: pytest.MonkeyPatch) -> None:
     reference = pd.DataFrame({"event_date": ["2026-01-01"], "x": [1.0]})
     current = pd.DataFrame({"event_date": ["2026-01-02"], "x": [10.0]})
