@@ -23,7 +23,7 @@ def test_display_report_prefers_native_notebook_display(
 
     returned = notebook.display_report(LumosResult(report=NativeReport()))
 
-    assert returned == "native iframe"
+    assert returned is None
     assert displayed == ["native iframe"]
 
 
@@ -95,14 +95,15 @@ def test_display_report_embeds_local_html_artifact_as_srcdoc_iframe(
         height=640,
     )
 
-    assert returned is displayed[-1]
-    assert returned.__class__.__name__ == "HTML"
+    assert returned is None
+    rendered = displayed[-1]
+    assert rendered.__class__.__name__ == "HTML"
     assert (
         'srcdoc="&lt;html&gt;&lt;body&gt;&lt;h1&gt;Report&lt;/h1&gt;&lt;/body&gt;&lt;/html&gt;"'
-        in returned.data
+        in rendered.data
     )
-    assert 'height="640"' in returned.data
-    assert "src=" not in returned.data
+    assert 'height="640"' in rendered.data
+    assert "src=" not in rendered.data
 
 
 def test_display_report_falls_back_to_iframe_when_native_display_dependency_missing(
@@ -125,9 +126,10 @@ def test_display_report_falls_back_to_iframe_when_native_display_dependency_miss
         LumosResult(report=NativeReport(), artifacts={"html": str(html_path)})
     )
 
-    assert returned is displayed[-1]
-    assert returned.__class__.__name__ == "HTML"
-    assert "srcdoc=" in returned.data
+    assert returned is None
+    rendered = displayed[-1]
+    assert rendered.__class__.__name__ == "HTML"
+    assert "srcdoc=" in rendered.data
 
 
 def test_display_report_displays_artifact_metadata_when_no_local_html(
@@ -141,5 +143,5 @@ def test_display_report_displays_artifact_metadata_when_no_local_html(
 
     returned = notebook.display_report(LumosResult(artifacts={"html": artifact}))
 
-    assert returned == artifact
+    assert returned is None
     assert displayed == [artifact]

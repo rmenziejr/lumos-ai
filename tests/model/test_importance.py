@@ -47,7 +47,7 @@ def test_feature_importance_returns_sorted_permutation_metrics() -> None:
 
     assert features[0] == "signal"
     assert "importance/permutation/signal" in result.metrics
-    assert result.summary["features"] == result.summary["methods"]["permutation"]["features"]
+    assert "features" not in result.summary
     assert result.metadata["report_type"] == "feature_importance"
     assert result.metadata["method"] == "permutation"
     assert result.metadata["report_name"] == "importance-baseline"
@@ -120,7 +120,7 @@ def test_feature_importance_defaults_to_both_methods_and_html_artifact(
     assert "importance/permutation/signal" in result.metrics
     assert "importance/shap/signal" in result.metrics
     assert set(result.summary["methods"]) == {"permutation", "shap"}
-    assert result.summary["features"] == result.summary["methods"]["permutation"]["features"]
+    assert "features" not in result.summary
     html_path = Path(result.artifacts["html"])
     html = html_path.read_text(encoding="utf-8")
     assert html_path.exists()

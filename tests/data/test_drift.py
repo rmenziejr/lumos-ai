@@ -63,6 +63,7 @@ def test_drift_report_returns_namespaced_metrics_without_evidently(
     assert result.metrics["drift/previous_window/n_drifted_columns"] == 1.0
     assert result.metrics["drift/previous_window/share_drifted_columns"] == 1.0
     assert result.metadata["comparison"] == "previous_window"
+    assert result.metadata["html_export_warning"] == "native_evidently_html_unavailable"
     assert result.flagged == [
         {
             "comparison": "previous_window",
@@ -71,11 +72,55 @@ def test_drift_report_returns_namespaced_metrics_without_evidently(
             "threshold": 0.1,
         }
     ]
+    assert "html" not in result.artifacts
+
+
+def test_drift_report_saves_native_evidently_html(
+    monkeypatch: pytest.MonkeyPatch,
+    tmp_path: Path,
+) -> None:
+    monkeypatch.setattr(settings.artifacts, "local_dir", tmp_path)
+    reference = pd.DataFrame({"event_date": ["2026-01-01"], "x": [1.0]})
+    current = pd.DataFrame({"event_date": ["2026-01-02"], "x": [10.0]})
+
+    class FakeReport:
+        def __init__(self, metrics: list[Any]) -> None:
+            self.metrics = metrics
+
+        def run(
+            self,
+            reference_data: pd.DataFrame,
+            current_data: pd.DataFrame,
+            column_mapping: Any = None,
+        ) -> None:
+            return None
+
+        def as_dict(self) -> dict[str, Any]:
+            return {
+                "metrics": [
+                    {
+                        "result": {
+                            "dataset_drift": True,
+                            "number_of_drifted_columns": 1,
+                            "share_of_drifted_columns": 1.0,
+                        }
+                    }
+                ]
+            }
+
+        def save_html(self, path: Path) -> None:
+            path.write_text("<html><body>native evidently</body></html>", encoding="utf-8")
+
+    monkeypatch.setattr("lumosai.data.drift.Report", FakeReport)
+    monkeypatch.setattr("lumosai.data.drift.DataDriftPreset", lambda: object())
+
+    result = drift_report(reference, current, temporal_features=["event_date"])
+
     html_path = Path(result.artifacts["html"])
     html = html_path.read_text(encoding="utf-8")
     assert html_path.exists()
-    assert "Data Drift Report" in html
-    assert "previous_window" in html
+    assert "native evidently" in html
+    assert "html_export_warning" not in result.metadata
 
 
 def test_drift_report_excludes_temporal_features(monkeypatch: pytest.MonkeyPatch) -> None:
@@ -828,6 +873,8 @@ def test_drift_report_extracts_evidently_value_drift_decisions(
     assert result.metrics["drift/benchmark/important_feature/x/drifted"] == 1.0
     assert result.metrics["drift/benchmark/important_feature/y/drifted"] == 0.0
     assert result.metrics["drift/benchmark/important_n_drifted_columns"] == 1.0
+    assert result.metrics["drift/benchmark/x/ks_p_value"] == 0.01
+    assert result.metrics["drift/benchmark/y/z_test_p_value"] == 1.0
     assert result.flagged == [
         {
             "comparison": "benchmark",

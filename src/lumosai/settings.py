@@ -81,6 +81,7 @@ class ModelSettings(BaseModel):
     shap_sample_size: int = 1000
     feature_importance_method: Literal["permutation", "shap", "both"] = "both"
     include_feature_importance_plots: bool = True
+    include_bias_plots: bool = True
     performance_drift_psi_threshold: float = Field(default=0.2, ge=0.0)
 
     @model_validator(mode="before")
