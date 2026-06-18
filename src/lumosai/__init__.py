@@ -15,6 +15,7 @@ __all__ = [
     "feature_importance",
     "get_metrics",
     "monitoring_report",
+    "display_report",
     "performance_drift_report",
     "performance_report",
     "profile",
@@ -43,6 +44,10 @@ def __getattr__(name: str) -> Any:
         from lumosai.bundles import monitoring_report
 
         return monitoring_report
+    if name == "display_report":
+        from lumosai.notebook import display_report
+
+        return display_report
     if name == "training_report":
         from lumosai.bundles import training_report
 

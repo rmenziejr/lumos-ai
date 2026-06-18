@@ -598,6 +598,7 @@ def drift_report(
             else {}
         ),
     }
+    display_report_object = run_result or report
     artifacts: dict[str, Any] = {}
     html_path: Path | None = None
     if include_html:
@@ -627,7 +628,7 @@ def drift_report(
                 summary=summary,
                 flagged=flagged,
                 artifacts=artifacts,
-                report=report,
+                report=display_report_object,
                 metadata=metadata,
             )
             return log_result_with_html_artifact(
@@ -642,7 +643,7 @@ def drift_report(
         summary=summary,
         flagged=flagged,
         artifacts=artifacts,
-        report=report,
+        report=display_report_object,
         metadata=metadata,
     )
     log_result(result, experiment_name=experiment_name)

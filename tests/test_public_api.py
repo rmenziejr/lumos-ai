@@ -10,6 +10,7 @@ from lumosai.model import (
     performance_drift_report,
     performance_report,
 )
+from lumosai.notebook import display_report
 from lumosai.results import LumosResult
 from lumosai.results import LumosRun as ResultsLumosRun
 from lumosai.settings import settings
@@ -23,6 +24,7 @@ def test_top_level_exports_match_domain_exports() -> None:
     assert la.bias_report is bias_report
     assert la.calibration_report is calibration_report
     assert la.get_metrics is get_metrics
+    assert la.display_report is display_report
     assert la.LumosResult is LumosResult
     assert la.LumosRun is LumosRun
     assert la.LumosRun is ResultsLumosRun

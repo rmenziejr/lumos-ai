@@ -118,6 +118,48 @@ def test_drift_report_excludes_temporal_features(monkeypatch: pytest.MonkeyPatch
     assert list(captured["current"].columns) == ["x"]
 
 
+def test_drift_report_retains_run_result_for_notebook_display(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    reference = pd.DataFrame({"event_date": ["2026-01-01"], "x": [1.0]})
+    current = pd.DataFrame({"event_date": ["2026-01-02"], "x": [10.0]})
+
+    class FakeRunResult:
+        def as_dict(self) -> dict[str, Any]:
+            return {
+                "metrics": [
+                    {
+                        "result": {
+                            "dataset_drift": False,
+                            "number_of_drifted_columns": 0,
+                            "share_of_drifted_columns": 0.0,
+                        }
+                    }
+                ]
+            }
+
+    run_result = FakeRunResult()
+
+    class FakeReport:
+        def __init__(self, metrics: list[Any]) -> None:
+            self.metrics = metrics
+
+        def run(
+            self,
+            reference_data: pd.DataFrame,
+            current_data: pd.DataFrame,
+            column_mapping: Any = None,
+        ) -> FakeRunResult:
+            return run_result
+
+    monkeypatch.setattr("lumosai.data.drift.Report", FakeReport)
+    monkeypatch.setattr("lumosai.data.drift.DataDriftPreset", lambda: object())
+
+    result = drift_report(reference, current, temporal_features=["event_date"])
+
+    assert result.report is run_result
+
+
 def test_drift_report_filters_feature_columns_and_passes_evidently_kwargs(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:

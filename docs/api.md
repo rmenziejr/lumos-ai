@@ -15,6 +15,23 @@ Fields:
 
 Use `result.to_dict()` for JSON-safe output.
 
+## Notebook Display
+
+### `display_report(...)`
+
+```python
+from lumosai import display_report
+
+display_report(result, title=None, width="100%", height=900)
+```
+
+Displays a `LumosResult` in a notebook.
+
+- Uses the native `result.report` display method first when available, such as ydata-profiling notebook iframe output.
+- Falls back to an iframe for local `result.artifacts["html"]` paths.
+- Displays MLflow artifact metadata when the HTML artifact is remote-only.
+- Keeps `result.to_dict()` JSON-safe; native report objects are retained only on `result.report`.
+
 ## `LumosRun`
 
 Bundle functions return `LumosRun`.
