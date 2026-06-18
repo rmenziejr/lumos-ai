@@ -8,8 +8,11 @@ from typing import Any
 from lumosai.exceptions import LumosOptionalDependencyError
 from lumosai.results import LumosResult
 
-_NATIVE_RENDER_METHODS = (
+_NATIVE_SIDE_EFFECT_METHODS = (
     "to_notebook_iframe",
+    "show",
+)
+_NATIVE_RENDER_METHODS = (
     "_repr_html_",
     "as_html",
     "to_html",
@@ -36,6 +39,14 @@ def _iframe(src: str, *, width: str | int, height: int) -> Any:
 
 
 def _native_display_object(report: Any) -> tuple[bool, Any | None]:
+    for method_name in _NATIVE_SIDE_EFFECT_METHODS:
+        method = getattr(report, method_name, None)
+        if method is None or not callable(method):
+            continue
+        try:
+            return True, method()
+        except ImportError:
+            continue
     for method_name in _NATIVE_RENDER_METHODS:
         method = getattr(report, method_name, None)
         if method is None or not callable(method):
@@ -46,12 +57,6 @@ def _native_display_object(report: Any) -> tuple[bool, Any | None]:
             continue
         if rendered is not None:
             return True, rendered
-    show = getattr(report, "show", None)
-    if show is not None and callable(show):
-        try:
-            return True, show()
-        except ImportError:
-            return False, None
     return False, None
 
 

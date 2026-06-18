@@ -50,6 +50,33 @@ def test_display_report_treats_native_show_as_displayed(
     assert displayed == []
 
 
+def test_display_report_stops_after_side_effect_notebook_iframe(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    from lumosai import notebook
+
+    displayed: list[Any] = []
+    native_calls: list[str] = []
+
+    class NativeReport:
+        def to_notebook_iframe(self) -> None:
+            native_calls.append("iframe")
+
+        def to_html(self) -> str:
+            native_calls.append("html")
+            return "<html>fallback string</html>"
+
+    monkeypatch.setattr(notebook, "_display", displayed.append)
+
+    returned = notebook.display_report(
+        LumosResult(report=NativeReport(), artifacts={"html": {"remote": "report.html"}})
+    )
+
+    assert returned is None
+    assert native_calls == ["iframe"]
+    assert displayed == []
+
+
 def test_display_report_uses_iframe_for_local_html_artifact(
     monkeypatch: pytest.MonkeyPatch,
     tmp_path: Path,
