@@ -14,6 +14,8 @@ from lumosai.model import bias_report, calibration_report, performance_report
 
 mlflow.set_experiment("model-training")
 
+train_scored["prediction"] = model.predict(X_train)
+train_scored["prediction_score"] = list(model.predict_proba(X_train))
 validation_scored["prediction"] = model.predict(X_validation)
 validation_scored["prediction_score"] = list(model.predict_proba(X_validation))
 
@@ -24,6 +26,7 @@ with mlflow.start_run(run_name="training-report"):
         prediction="prediction",
         prediction_score="prediction_score",
         score_labels=list(model.classes_),
+        train=train_scored,
         include_lift=True,
         experiment_name="model-training",
     )
@@ -45,3 +48,14 @@ with mlflow.start_run(run_name="training-report"):
         experiment_name="model-training",
     )
 ```
+
+Passing `train=train_scored` adds overfitting-oriented metrics to the same performance result:
+
+```text
+performance/train/roc_auc
+performance/holdout/roc_auc
+performance/gap/roc_auc
+performance/ratio/roc_auc
+```
+
+`training_report()` passes scored train data into its performance child automatically when performance is enabled, so bundle runs log the same train, holdout, gap, and ratio metrics. Train plots are not added by default; the HTML report stays focused on the holdout/validation diagnostics.

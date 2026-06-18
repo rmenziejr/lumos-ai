@@ -305,7 +305,7 @@ Builds the standard post-training bundle and returns a `LumosRun`.
 - Always builds `train_sample` from `train` with `role="train_benchmark"`.
 - Always builds `holdout_sample` from `holdout` with `role="holdout"`.
 - Runs profile as `profile` only when `include_profile=True`.
-- Runs performance as `performance` when `prediction` is provided, or when `include_performance=True`.
+- Runs performance as `performance` when `prediction` is provided, or when `include_performance=True`. The performance child receives both scored `train` and scored `holdout` frames, so it logs train, holdout, gap, and ratio metrics.
 - Runs bias as `bias` when `protected_attribute` is provided, or when `include_bias=True`.
 - Runs feature importance as `feature_importance` when `model` is provided and `include_feature_importance` is not `False`, unless `settings.bundles.include_feature_importance_in_training` disables the default.
 - Uses `sample_size` for train and holdout samples, and for profile temporal sampling when profile is enabled.
@@ -344,6 +344,7 @@ performance_report(
     prediction,
     prediction_score=None,
     score_labels=None,
+    train=None,
     task_type=None,
     custom_metrics=None,
     include_lift=None,
@@ -351,16 +352,21 @@ performance_report(
     feature_columns=None,
     categorical_columns=None,
     include_plots=True,
+    include_train_plots=False,
     experiment_name=None,
 )
 ```
 
-Computes current-window model performance.
+Computes current-window model performance. When a scored train frame is provided, also computes train-vs-holdout generalization metrics for overfitting checks.
 
 - `target` is the outcome column.
 - `prediction` is the predicted label or value column.
 - `prediction_score` is an optional score/probability column, a column of probability arrays, or a mapping of labels to probability columns.
 - `score_labels` defines probability order for binary or multiclass arrays. Pass `list(model.classes_)` for sklearn-style classifiers.
+- `train` is an optional scored training frame with the same `target`, `prediction`, and optional `prediction_score` fields. When provided, metrics are emitted under `performance/train/...` and `performance/holdout/...` instead of the legacy unsplit `performance/...` keys.
+- `performance/gap/<metric>` compares train to holdout. For higher-is-better metrics such as ROC AUC and PR AUC, gap is `train - holdout`. For lower-is-better metrics such as log loss, MAE, and RMSE, gap is `holdout - train`.
+- `performance/ratio/<metric>` is `holdout / train`, which is useful for MLflow dashboards alongside the gap values.
+- `include_train_plots` records whether train plots were requested. Train metrics are available when `train` is provided; report HTML remains holdout-focused in this version.
 - When multiclass array scores omit `score_labels`, labels are inferred by sorting observed target/prediction labels and warning metadata is recorded.
 - Classification reports include ROC AUC and PR AUC when scores are supplied, plus log loss when probability-like scores are supplied.
 - Pass `include_lift=True` to add decile lift metrics under `performance/lift/<class>/...`.

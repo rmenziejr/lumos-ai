@@ -154,6 +154,46 @@ def test_training_report_runs_optional_profile_and_bias(
     assert called_report_types == ["sample", "sample", "profile", "performance", "bias"]
 
 
+def test_training_report_passes_train_frame_to_performance_report(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    captured: dict[str, Any] = {}
+
+    def fake_performance_report(current: Any, **kwargs: Any) -> LumosResult:
+        captured["current"] = current
+        captured.update(kwargs)
+        return LumosResult(
+            metrics={"performance/holdout/accuracy": 0.8},
+            metadata={"report_type": "performance"},
+        )
+
+    monkeypatch.setattr(bundles, "build_sample", lambda *_args, **_kwargs: LumosResult())
+    monkeypatch.setattr(bundles, "performance_report", fake_performance_report)
+    monkeypatch.setattr(
+        bundles,
+        "feature_importance",
+        lambda *_args, **_kwargs: LumosResult(metadata={"report_type": "feature_importance"}),
+    )
+
+    train = make_training_frame()
+    holdout = make_training_frame()
+
+    result = training_report(
+        train,
+        holdout,
+        target="target",
+        prediction="prediction",
+        model=object(),
+        feature_columns=["amount", "age"],
+    )
+
+    assert result.results["performance"].metadata["report_type"] == "performance"
+    assert captured["current"] is not train
+    assert captured["current"].equals(holdout)
+    assert captured["train"].equals(train)
+    assert captured["include_train_plots"] is False
+
+
 def test_training_report_requires_prediction_when_performance_enabled() -> None:
     with pytest.raises(LumosValidationError, match="prediction"):
         training_report(

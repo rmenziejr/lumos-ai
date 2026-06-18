@@ -159,6 +159,7 @@ def _preflight_training_report(
     holdout: pd.DataFrame,
     target: str,
     prediction: str | None,
+    prediction_score: str | None,
     model: Any | None,
     feature_columns: list[str] | None,
     protected_attribute: str | ProtectedAttribute | None,
@@ -181,7 +182,11 @@ def _preflight_training_report(
         if prediction is None:
             msg = "training_report expected performance but prediction is missing"
             raise LumosValidationError(msg)
-        require_columns(holdout, [target, prediction])
+        required_performance_columns = [target, prediction]
+        if prediction_score is not None:
+            required_performance_columns.append(prediction_score)
+        require_columns(train, required_performance_columns)
+        require_columns(holdout, required_performance_columns)
 
     if _bias_expected(protected_attribute=protected_attribute, include_bias=include_bias):
         if protected_attribute is None:
@@ -400,6 +405,7 @@ def training_report(
         holdout=holdout_pd,
         target=target,
         prediction=prediction,
+        prediction_score=prediction_score,
         model=model,
         feature_columns=feature_columns,
         protected_attribute=protected_attribute,
@@ -466,6 +472,8 @@ def training_report(
                     target=target,
                     prediction=prediction,
                     prediction_score=prediction_score,
+                    train=train_pd,
+                    include_train_plots=False,
                     report_name=f"{report_name} Performance" if report_name else None,
                     feature_columns=feature_columns,
                     categorical_columns=categorical_columns,

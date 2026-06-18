@@ -38,6 +38,55 @@ def test_performance_report_returns_namespaced_metrics() -> None:
     assert result.metadata["task_type"] == "classification"
 
 
+def test_performance_report_adds_train_holdout_gap_metrics() -> None:
+    train = pd.DataFrame(
+        {
+            "actual": [0, 1, 1, 0, 1, 0],
+            "prediction": [0, 1, 1, 0, 1, 0],
+            "prediction_score": [0.02, 0.98, 0.95, 0.05, 0.9, 0.1],
+        }
+    )
+    holdout = pd.DataFrame(
+        {
+            "actual": [0, 1, 1, 0, 1, 0],
+            "prediction": [0, 1, 0, 0, 1, 1],
+            "prediction_score": [0.1, 0.75, 0.45, 0.25, 0.8, 0.65],
+        }
+    )
+
+    result = performance_report(
+        holdout,
+        target="actual",
+        prediction="prediction",
+        prediction_score="prediction_score",
+        train=train,
+        task_type="classification",
+        include_plots=False,
+    )
+
+    assert "performance/roc_auc" not in result.metrics
+    assert result.metrics["performance/train/roc_auc"] == pytest.approx(1.0)
+    assert result.metrics["performance/holdout/roc_auc"] < result.metrics[
+        "performance/train/roc_auc"
+    ]
+    assert result.metrics["performance/gap/roc_auc"] == pytest.approx(
+        result.metrics["performance/train/roc_auc"]
+        - result.metrics["performance/holdout/roc_auc"]
+    )
+    assert result.metrics["performance/ratio/roc_auc"] == pytest.approx(
+        result.metrics["performance/holdout/roc_auc"]
+        / result.metrics["performance/train/roc_auc"]
+    )
+    assert result.metrics["performance/gap/log_loss"] == pytest.approx(
+        result.metrics["performance/holdout/log_loss"]
+        - result.metrics["performance/train/log_loss"]
+    )
+    assert result.summary["splits"] == ["train", "holdout"]
+    assert "comparison" in result.summary
+    assert result.metadata["train_metrics_included"] is True
+    assert result.metadata["include_train_plots"] is False
+
+
 def test_performance_report_creates_default_classification_html_artifact(
     monkeypatch: pytest.MonkeyPatch,
     tmp_path: Path,

@@ -22,6 +22,7 @@ from lumosai.model.scores import ScoreInput, normalize_classification_scores
 from lumosai.model.validation import validate_prediction_frame
 from lumosai.results import LumosResult
 from lumosai.schema import validate_categorical_columns
+from lumosai.settings import settings
 
 
 def performance_report(
@@ -30,6 +31,7 @@ def performance_report(
     prediction: str,
     prediction_score: ScoreInput | None = None,
     score_labels: list[Any] | None = None,
+    train: Any | None = None,
     task_type: TaskType | None = None,
     custom_metrics: list[tuple[str, Callable[..., float]]] | None = None,
     include_lift: bool | None = None,
@@ -37,6 +39,7 @@ def performance_report(
     feature_columns: list[str] | None = None,
     categorical_columns: list[str] | None = None,
     include_plots: bool = True,
+    include_train_plots: bool = False,
     experiment_name: str | None = None,
 ) -> LumosResult:
     """Evaluate model predictions and return namespaced performance metrics.
@@ -91,10 +94,65 @@ def performance_report(
     elif resolved_task == "classification" and scores is not None and include_plots:
         _, lift_summary = lift_metrics(current_pd[target], scores)
 
-    metrics = {f"performance/{name}": value for name, value in raw_metrics.items()}
+    train_raw_metrics: dict[str, float] | None = None
+    if train is not None:
+        train_pd = to_pandas(train)
+        validate_prediction_frame(
+            train_pd,
+            target=target,
+            prediction=prediction,
+            prediction_score=prediction_score if isinstance(prediction_score, str) else None,
+        )
+        if feature_columns is not None:
+            require_columns(train_pd, feature_columns)
+        validate_categorical_columns(
+            train_pd,
+            categorical_columns=categorical_columns,
+            analysis_columns=feature_columns,
+        )
+        train_scores = (
+            normalize_classification_scores(
+                train_pd,
+                target=target,
+                prediction=prediction,
+                prediction_score=prediction_score,
+                score_labels=score_labels,
+            )
+            if resolved_task == "classification" and prediction_score is not None
+            else None
+        )
+        train_raw_metrics = get_metrics(
+            train_pd[target],
+            train_pd[prediction],
+            y_score=cast(Sequence[Any], train_scores.values) if train_scores is not None else None,
+            score_labels=train_scores.labels if train_scores is not None else None,
+            task_type=resolved_task,
+            custom_metrics=custom_metrics,
+        )
+
+    metrics = (
+        _comparative_performance_metrics(
+            train_metrics=train_raw_metrics,
+            holdout_metrics=raw_metrics,
+        )
+        if train_raw_metrics is not None
+        else {f"performance/{name}": value for name, value in raw_metrics.items()}
+    )
     metadata: dict[str, Any] = {"report_type": "performance", "task_type": resolved_task}
     if scores is not None:
         metadata.update(scores.metadata())
+    if train_raw_metrics is not None:
+        summary["train_metrics"] = train_raw_metrics
+        summary["holdout_metrics"] = raw_metrics
+        summary["comparison"] = _comparative_performance_summary(
+            train_metrics=train_raw_metrics,
+            holdout_metrics=raw_metrics,
+        )
+        summary["splits"] = ["train", "holdout"]
+        metadata["train_metrics_included"] = True
+        metadata["include_train_plots"] = include_train_plots
+    else:
+        metadata["train_metrics_included"] = False
     if report_name is not None:
         metadata["report_name"] = report_name
     if feature_columns is not None:
@@ -150,3 +208,68 @@ def performance_report(
     )
     log_result(result, experiment_name=experiment_name)
     return result
+
+
+def _metric_greater_is_better(metric: str) -> bool:
+    threshold = settings.model.metric_thresholds.get(metric)
+    if threshold is not None:
+        return threshold.greater_is_better
+    return metric not in {"log_loss", "mae", "rmse", "mean_absolute_error", "mse"}
+
+
+def _metric_gap(*, metric: str, train_value: float, holdout_value: float) -> float:
+    if _metric_greater_is_better(metric):
+        return train_value - holdout_value
+    return holdout_value - train_value
+
+
+def _metric_ratio(*, train_value: float, holdout_value: float) -> float:
+    if train_value == 0:
+        return float("nan")
+    return holdout_value / train_value
+
+
+def _comparative_performance_metrics(
+    *,
+    train_metrics: dict[str, float],
+    holdout_metrics: dict[str, float],
+) -> dict[str, float]:
+    metrics: dict[str, float] = {}
+    for name, value in holdout_metrics.items():
+        metrics[f"performance/holdout/{name}"] = value
+    for name, value in train_metrics.items():
+        metrics[f"performance/train/{name}"] = value
+    for name in sorted(set(train_metrics).intersection(holdout_metrics)):
+        metrics[f"performance/gap/{name}"] = _metric_gap(
+            metric=name,
+            train_value=train_metrics[name],
+            holdout_value=holdout_metrics[name],
+        )
+        metrics[f"performance/ratio/{name}"] = _metric_ratio(
+            train_value=train_metrics[name],
+            holdout_value=holdout_metrics[name],
+        )
+    return metrics
+
+
+def _comparative_performance_summary(
+    *,
+    train_metrics: dict[str, float],
+    holdout_metrics: dict[str, float],
+) -> dict[str, dict[str, float]]:
+    comparison: dict[str, dict[str, float]] = {}
+    for name in sorted(set(train_metrics).intersection(holdout_metrics)):
+        comparison[name] = {
+            "train": train_metrics[name],
+            "holdout": holdout_metrics[name],
+            "gap": _metric_gap(
+                metric=name,
+                train_value=train_metrics[name],
+                holdout_value=holdout_metrics[name],
+            ),
+            "ratio": _metric_ratio(
+                train_value=train_metrics[name],
+                holdout_value=holdout_metrics[name],
+            ),
+        }
+    return comparison
