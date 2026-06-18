@@ -59,6 +59,9 @@ def _html_iframe_srcdoc(html_path: Path, *, width: str | int, height: int) -> An
 
 
 def _native_display_object(report: Any) -> tuple[bool, Any | None]:
+    if callable(getattr(report, "_repr_html_", None)):
+        return True, report
+
     for method_name in _NATIVE_SIDE_EFFECT_METHODS:
         method = getattr(report, method_name, None)
         if method is None or not callable(method):

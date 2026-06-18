@@ -426,22 +426,49 @@ def _bias_metric_names(rows: list[dict[str, Any]]) -> list[str]:
     return ordered[:6]
 
 
-def _bias_metric_plot(rows: list[dict[str, Any]], *, attribute: str) -> str:
+def _bias_metric_gap_plot(rows: list[dict[str, Any]], *, attribute: str) -> str:
     metric_names = _bias_metric_names(rows)
-    groups = [str(row["group"]) for row in rows]
-    x = np.arange(len(groups))
-    width = 0.8 / max(1, len(metric_names))
-    fig, ax = plt.subplots(figsize=(8, 4.5))
-    for index, metric_name in enumerate(metric_names):
-        values = [float(row.get(metric_name, np.nan)) for row in rows]
-        offset = (index - (len(metric_names) - 1) / 2) * width
-        ax.bar(x + offset, values, width=width, label=metric_name)
-    ax.set_xticks(x, groups, rotation=30, ha="right")
-    ax.set(ylabel="Metric Value", title=f"Metric Comparison: {attribute}")
-    if metric_names:
-        ax.legend(loc="best")
+    gap_rows: list[tuple[str, str, float]] = []
+    for metric_name in metric_names:
+        finite_rows: list[tuple[str, float]] = []
+        for row in rows:
+            value = row.get(metric_name)
+            try:
+                numeric_value = float(value)
+            except (TypeError, ValueError):
+                continue
+            if np.isfinite(numeric_value):
+                finite_rows.append((str(row["group"]), numeric_value))
+        if len(finite_rows) < 2:
+            continue
+        lower_is_better = metric_name in {
+            "mae",
+            "rmse",
+            "log_loss",
+            "mean_absolute_residual",
+            "abs_mean_residual",
+        }
+        best = min(value for _, value in finite_rows) if lower_is_better else max(
+            value for _, value in finite_rows
+        )
+        for group, value in finite_rows:
+            gap = value - best if lower_is_better else best - value
+            gap_rows.append((metric_name, group, max(0.0, gap)))
+
+    if not gap_rows:
+        return "<p>No comparable finite metric gaps.</p>"
+
+    labels = [f"{metric} / {group}" for metric, group, _ in gap_rows]
+    gaps = [gap for _, _, gap in gap_rows]
+    x = np.arange(len(labels))
+    fig_width = max(8.0, 0.45 * len(labels) + 2.0)
+    fig, ax = plt.subplots(figsize=(fig_width, 4.5))
+    colors = ["#d73a49" if gap > 0 else "#2ea44f" for gap in gaps]
+    ax.bar(x, gaps, color=colors)
+    ax.set_xticks(x, labels, rotation=35, ha="right")
+    ax.set(ylabel="Gap From Best Group", title=f"Metric Gap From Best Group: {attribute}")
     fig.tight_layout()
-    return _figure_html(fig, f"Metric Comparison {attribute}")
+    return _figure_html(fig, f"Metric Gap From Best Group {attribute}")
 
 
 def _bias_flag_table(flags: list[dict[str, Any]]) -> str:
@@ -485,8 +512,8 @@ def bias_html(*, title: str, summary: dict[str, Any], flagged: list[dict[str, An
             )
             sections.append(
                 (
-                    f"Metric Comparison: {attribute}",
-                    _bias_metric_plot(rows, attribute=str(attribute)),
+                    f"Metric Gap From Best Group: {attribute}",
+                    _bias_metric_gap_plot(rows, attribute=str(attribute)),
                 )
             )
     sections.append(("Flagged Comparisons", _bias_flag_table(flagged)))

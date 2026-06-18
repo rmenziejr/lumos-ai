@@ -57,7 +57,7 @@ def test_bias_report_creates_html_artifact_by_default(
     html = html_path.read_text(encoding="utf-8")
     assert "Segment Bias" in html
     assert "Group Size: segment" in html
-    assert "Metric Comparison: segment" in html
+    assert "Metric Gap From Best Group: segment" in html
     assert "Flagged Comparisons" in html
 
 

@@ -27,6 +27,26 @@ def test_display_report_prefers_native_notebook_display(
     assert displayed == ["native iframe"]
 
 
+def test_display_report_prefers_native_repr_object_over_rendered_html_string(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    from lumosai import notebook
+
+    displayed: list[Any] = []
+
+    class EvidentlySnapshot:
+        def _repr_html_(self) -> str:
+            return "<html>snapshot iframe</html>"
+
+    snapshot = EvidentlySnapshot()
+    monkeypatch.setattr(notebook, "_display", displayed.append)
+
+    returned = notebook.display_report(LumosResult(report=snapshot))
+
+    assert returned is None
+    assert displayed == [snapshot]
+
+
 def test_display_report_treats_native_show_as_displayed(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
