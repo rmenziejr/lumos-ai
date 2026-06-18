@@ -6,10 +6,18 @@ from typing import Any
 import numpy as np
 import pandas as pd
 
+from lumosai.artifacts import (
+    artifact_workspace,
+    html_artifact_metadata,
+    local_html_artifact_path,
+    log_result_with_html_artifact,
+    should_keep_html_artifact,
+)
 from lumosai.data.ingest import to_pandas
 from lumosai.data.validation import require_columns
 from lumosai.mlflow import log_result
 from lumosai.model.metrics import TaskType, compare_metric, detect_task_type, get_metrics
+from lumosai.model.plots import bias_html
 from lumosai.model.validation import validate_prediction_frame
 from lumosai.results import LumosResult
 from lumosai.schema import validate_categorical_columns
@@ -160,6 +168,7 @@ def bias_report(
     report_name: str | None = None,
     feature_columns: list[str] | None = None,
     categorical_columns: list[str] | None = None,
+    include_plots: bool | None = None,
     experiment_name: str | None = None,
 ) -> LumosResult:
     """Evaluate model performance parity across protected attribute groups.
@@ -275,10 +284,47 @@ def bias_report(
     if selected_categorical_columns:
         metadata["categorical_columns"] = selected_categorical_columns
 
+    artifacts: dict[str, Any] = {}
+    resolved_include_plots = (
+        settings.model.include_bias_plots if include_plots is None else include_plots
+    )
+    if resolved_include_plots:
+        title = report_name or "Bias Report"
+        keep_local = should_keep_html_artifact(experiment_name=experiment_name)
+        with artifact_workspace(keep_local=keep_local) as workspace:
+            html_path = local_html_artifact_path(
+                workspace,
+                "bias_report.html",
+                report_name=report_name,
+            )
+            html_path.write_text(
+                bias_html(title=title, summary=summary, flagged=flagged),
+                encoding="utf-8",
+            )
+            artifacts, _ = html_artifact_metadata(
+                html_path,
+                artifact_path="bias",
+                experiment_name=experiment_name,
+            )
+            result = LumosResult(
+                metrics={"bias/flags_count": float(len(flagged))},
+                summary=summary,
+                flagged=flagged,
+                artifacts=artifacts,
+                metadata=metadata,
+            )
+            return log_result_with_html_artifact(
+                result,
+                html_path=html_path,
+                artifact_path="bias",
+                experiment_name=experiment_name,
+            )
+
     result = LumosResult(
         metrics={"bias/flags_count": float(len(flagged))},
         summary=summary,
         flagged=flagged,
+        artifacts=artifacts,
         metadata=metadata,
     )
     log_result(result, experiment_name=experiment_name)

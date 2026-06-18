@@ -12,6 +12,7 @@ from lumosai.results import LumosResult
 _NATIVE_SIDE_EFFECT_METHODS = (
     "to_notebook_iframe",
     "show",
+    "report",
 )
 _NATIVE_RENDER_METHODS = (
     "_repr_html_",
@@ -86,7 +87,7 @@ def display_report(
     width: str | int = "100%",
     height: int = 900,
 ) -> Any:
-    """Display a Lumos result in a notebook and return the displayed object.
+    """Display a Lumos result in a notebook.
 
     Native backend report objects are preferred because libraries such as
     ydata-profiling can provide richer notebook display behavior than saved
@@ -100,19 +101,19 @@ def display_report(
         handled, rendered = _native_display_object(result.report)
         if handled and rendered is not None:
             _display(rendered)
-            return rendered
+            return None
         if handled:
-            return rendered
+            return None
 
     html_artifact = result.artifacts.get("html")
     if isinstance(html_artifact, str) and Path(html_artifact).exists():
         rendered = _html_iframe_srcdoc(Path(html_artifact), width=width, height=height)
         _display(rendered)
-        return rendered
+        return None
 
     if html_artifact is not None:
         _display(html_artifact)
-        return html_artifact
+        return None
 
     _display(result)
-    return result
+    return None

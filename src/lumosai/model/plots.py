@@ -353,22 +353,6 @@ def calibration_html(*, title: str, calibration_summary: dict[str, Any]) -> str:
     return _html_document(title, sections)
 
 
-def drift_fallback_html(*, title: str, summary: dict[str, Any], metadata: dict[str, Any]) -> str:
-    rows = "".join(
-        "<tr>"
-        f"<td>{html.escape(str(key))}</td>"
-        f"<td>{html.escape(str(value))}</td>"
-        "</tr>"
-        for key, value in {**metadata, **summary}.items()
-    )
-    table = (
-        "<table><thead><tr><th>Field</th><th>Value</th></tr></thead><tbody>"
-        + rows
-        + "</tbody></table>"
-    )
-    return _html_document(title, [("Data Drift Report", table)])
-
-
 def _importance_plot(rows: list[dict[str, Any]], *, title: str, include_error: bool) -> str:
     ordered = list(reversed(rows[:20]))
     features = [str(row["feature"]) for row in ordered]
@@ -407,4 +391,103 @@ def importance_html(*, title: str, methods: dict[str, dict[str, Any]]) -> str:
                 ),
             )
         )
+    return _html_document(title, sections)
+
+
+def _bias_group_size_plot(rows: list[dict[str, Any]], *, attribute: str) -> str:
+    groups = [str(row["group"]) for row in rows]
+    counts = [int(row["count"]) for row in rows]
+    fig_height = max(3.0, 0.35 * len(groups) + 1.2)
+    fig, ax = plt.subplots(figsize=(7, fig_height))
+    ax.barh(groups, counts)
+    ax.set(xlabel="Rows", title=f"Group Size: {attribute}")
+    fig.tight_layout()
+    return _figure_html(fig, f"Group Size {attribute}")
+
+
+def _bias_metric_names(rows: list[dict[str, Any]]) -> list[str]:
+    preferred = [
+        "accuracy",
+        "precision",
+        "recall",
+        "f1",
+        "positive_prediction_rate",
+        "roc_auc",
+        "pr_auc",
+        "mae",
+        "rmse",
+        "r2",
+        "mean_absolute_residual",
+        "abs_mean_residual",
+    ]
+    available = {key for row in rows for key in row if key not in {"group", "count"}}
+    ordered = [metric for metric in preferred if metric in available]
+    ordered.extend(sorted(available - set(ordered)))
+    return ordered[:6]
+
+
+def _bias_metric_plot(rows: list[dict[str, Any]], *, attribute: str) -> str:
+    metric_names = _bias_metric_names(rows)
+    groups = [str(row["group"]) for row in rows]
+    x = np.arange(len(groups))
+    width = 0.8 / max(1, len(metric_names))
+    fig, ax = plt.subplots(figsize=(8, 4.5))
+    for index, metric_name in enumerate(metric_names):
+        values = [float(row.get(metric_name, np.nan)) for row in rows]
+        offset = (index - (len(metric_names) - 1) / 2) * width
+        ax.bar(x + offset, values, width=width, label=metric_name)
+    ax.set_xticks(x, groups, rotation=30, ha="right")
+    ax.set(ylabel="Metric Value", title=f"Metric Comparison: {attribute}")
+    if metric_names:
+        ax.legend(loc="best")
+    fig.tight_layout()
+    return _figure_html(fig, f"Metric Comparison {attribute}")
+
+
+def _bias_flag_table(flags: list[dict[str, Any]]) -> str:
+    if not flags:
+        return "<p>No flagged comparisons.</p>"
+    rows = []
+    for flag in flags:
+        rows.append(
+            "<tr>"
+            f"<td>{html.escape(str(flag.get('protected_attribute', '')))}</td>"
+            f"<td>{html.escape(str(flag.get('group', '')))}</td>"
+            f"<td>{html.escape(str(flag.get('metric', '')))}</td>"
+            f"<td>{html.escape(str(flag.get('group_value', '')))}</td>"
+            f"<td>{html.escape(str(flag.get('threshold', '')))}</td>"
+            "</tr>"
+        )
+    return (
+        "<table><thead><tr>"
+        "<th>Attribute</th><th>Group</th><th>Metric</th><th>Group Value</th><th>Threshold</th>"
+        "</tr></thead><tbody>"
+        + "".join(rows)
+        + "</tbody></table>"
+    )
+
+
+def bias_html(*, title: str, summary: dict[str, Any], flagged: list[dict[str, Any]]) -> str:
+    sections: list[tuple[str, str]] = []
+    by_attribute = summary.get("by_attribute", {})
+    if isinstance(by_attribute, dict):
+        for attribute, attribute_summary in by_attribute.items():
+            if not isinstance(attribute_summary, dict):
+                continue
+            rows = attribute_summary.get("by_group", [])
+            if not isinstance(rows, list) or not rows:
+                continue
+            sections.append(
+                (
+                    f"Group Size: {attribute}",
+                    _bias_group_size_plot(rows, attribute=str(attribute)),
+                )
+            )
+            sections.append(
+                (
+                    f"Metric Comparison: {attribute}",
+                    _bias_metric_plot(rows, attribute=str(attribute)),
+                )
+            )
+    sections.append(("Flagged Comparisons", _bias_flag_table(flagged)))
     return _html_document(title, sections)

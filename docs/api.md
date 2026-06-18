@@ -27,10 +27,11 @@ display_report(result, title=None, width="100%", height=900)
 
 Displays a `LumosResult` in a notebook.
 
-- Uses the native `result.report` display method first when available, such as ydata-profiling notebook iframe output.
+- Uses the native `result.report` display method first when available, such as Evidently report display or ydata-profiling notebook iframe output.
 - Falls back to an iframe for local `result.artifacts["html"]` paths.
 - Displays MLflow artifact metadata when the HTML artifact is remote-only.
 - Keeps `result.to_dict()` JSON-safe; native report objects are retained only on `result.report`.
+- Returns `None` so notebook cells do not echo duplicate report output.
 
 ## `LumosRun`
 
@@ -184,8 +185,9 @@ Runs an Evidently data drift report.
 - `importance_result` can be a `feature_importance()` result; `drift_report()` uses the top N permutation features from `settings.data.important_drift_top_n`.
 - Explicit `important_features` take precedence over `importance_result`.
 - Adds `drift/<comparison>/important_n_drifted_columns`, `drift/<comparison>/important_share_drifted_columns`, and `drift/<comparison>/important_feature/<feature>/drifted` when important features are supplied.
+- Adds available Evidently metric values using normalized paths such as `drift/<comparison>/<feature>/ks_p_value` and `drift/<comparison>/<feature>/drifted`.
 - Flags `important_feature_drift` when an important feature drifts and `settings.data.alert_on_important_feature_drift` is true.
-- Exports `result.artifacts["html"]` by default. With no MLflow experiment configured, the HTML file is retained locally; with MLflow artifact logging enabled, the result stores the MLflow artifact path.
+- Exports native Evidently HTML to `result.artifacts["html"]` by default when the installed Evidently object supports HTML export. If native export is unavailable, no custom fallback drift HTML is written and `result.metadata["html_export_warning"]` records the reason.
 - Supports current Evidently APIs and legacy report payloads.
 
 Supported `evidently_kwargs`:
@@ -443,6 +445,7 @@ bias_report(
     report_name=None,
     feature_columns=None,
     categorical_columns=None,
+    include_plots=None,
     experiment_name=None,
 )
 ```
@@ -454,6 +457,8 @@ Computes group-wise model behavior across protected attributes.
 - Classification reports include positive prediction rate for binary labels.
 - Regression reports include residual and error summaries.
 - Missing and out-of-bin protected values are retained as explicit groups.
+- `include_plots=None` uses `settings.model.include_bias_plots`, which defaults to `True`.
+- Exports `result.artifacts["html"]` by default with group-size, metric comparison, and flagged-comparison sections.
 - Stores `feature_columns` and `categorical_columns` in metadata when provided.
 
 ### `feature_importance(...)`
@@ -489,7 +494,6 @@ Computes model feature importance after training or evaluation.
 - Exports `result.artifacts["html"]` by default with permutation and/or SHAP importance plots.
 - Returns metrics under `importance/<method>/<feature>`.
 - Stores method-specific rows in `result.summary["methods"][method]["features"]`.
-- Keeps `result.summary["features"]` as a convenience alias for permutation rows when available, otherwise SHAP rows.
 - Stores method, feature columns, and optional `report_name` in metadata.
 
 ## Settings
@@ -515,6 +519,7 @@ Relevant model defaults live under `settings.model`:
 
 - `feature_importance_method`: default method for `feature_importance()` when `method=None`; defaults to `"both"`.
 - `include_feature_importance_plots`: default artifact behavior for `feature_importance()` when `include_plots=None`; defaults to `True`.
+- `include_bias_plots`: default artifact behavior for `bias_report()` when `include_plots=None`; defaults to `True`.
 - `performance_drift_psi_threshold`: default PSI flag threshold for `performance_drift_report()`; defaults to `0.2`.
 
 Settings use nested Pydantic models and environment variables with the `LUMOSAI_` prefix.

@@ -30,6 +30,58 @@ def test_bias_report_flags_group_disparity_for_classification() -> None:
     assert any(flag["protected_attribute"] == "segment" for flag in result.flagged)
 
 
+def test_bias_report_creates_html_artifact_by_default(
+    monkeypatch: pytest.MonkeyPatch,
+    tmp_path,
+) -> None:
+    monkeypatch.setattr(settings.artifacts, "local_dir", tmp_path)
+    frame = pd.DataFrame(
+        {
+            "actual": [1, 1, 1, 1, 1, 1, 1, 1],
+            "prediction": [1, 1, 1, 1, 1, 1, 0, 0],
+            "segment": ["a", "a", "a", "a", "b", "b", "b", "b"],
+        }
+    )
+
+    result = bias_report(
+        frame,
+        target="actual",
+        prediction="prediction",
+        protected_attribute=["segment"],
+        task_type="classification",
+        report_name="Segment Bias",
+    )
+
+    html_path = tmp_path / "segment-bias.html"
+    assert result.artifacts["html"] == str(html_path)
+    html = html_path.read_text(encoding="utf-8")
+    assert "Segment Bias" in html
+    assert "Group Size: segment" in html
+    assert "Metric Comparison: segment" in html
+    assert "Flagged Comparisons" in html
+
+
+def test_bias_report_can_disable_html_artifact() -> None:
+    frame = pd.DataFrame(
+        {
+            "actual": [1, 1, 0, 0],
+            "prediction": [1, 0, 0, 0],
+            "segment": ["a", "a", "b", "b"],
+        }
+    )
+
+    result = bias_report(
+        frame,
+        target="actual",
+        prediction="prediction",
+        protected_attribute=["segment"],
+        task_type="classification",
+        include_plots=False,
+    )
+
+    assert "html" not in result.artifacts
+
+
 def test_bias_report_bins_continuous_protected_attribute() -> None:
     frame = pd.DataFrame(
         {

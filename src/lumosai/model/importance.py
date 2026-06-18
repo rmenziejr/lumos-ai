@@ -188,7 +188,6 @@ def feature_importance(
     summary = {
         "rows": len(frame_used),
         "methods": methods,
-        "features": methods.get("permutation", next(iter(methods.values())))["features"],
     }
     artifacts: dict[str, Any] = {}
     html_path: Path | None = None

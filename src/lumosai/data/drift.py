@@ -25,7 +25,6 @@ from lumosai.data.validation import (
 )
 from lumosai.exceptions import LumosOptionalDependencyError, LumosValidationError
 from lumosai.mlflow import log_result
-from lumosai.model.plots import drift_fallback_html
 from lumosai.results import LumosResult
 from lumosai.schema import filter_supported_kwargs, validate_categorical_columns
 from lumosai.settings import settings
@@ -83,6 +82,83 @@ def safe_comparison_name(value: str) -> str:
     lowered = value.strip().lower()
     normalized = re.sub(r"[^a-z0-9]+", "_", lowered).strip("_")
     return normalized or "benchmark"
+
+
+def _safe_metric_component(value: Any) -> str:
+    text = str(value).strip()
+    text = text.replace("K-S", "KS").replace("k-s", "ks")
+    text = re.sub(r"(?<=[a-z0-9])(?=[A-Z])", "_", text)
+    return safe_comparison_name(text)
+
+
+def _metric_type_name(config: Mapping[str, Any], metric: Mapping[str, Any]) -> str:
+    metric_type = config.get("type")
+    if isinstance(metric_type, str) and metric_type:
+        return metric_type.rsplit(":", 1)[-1]
+    metric_name = metric.get("metric_name")
+    if isinstance(metric_name, str) and metric_name:
+        return metric_name.split("(", 1)[0]
+    return "metric"
+
+
+def _extract_numeric_leaf_metrics(
+    *,
+    value: Any,
+    path: list[str],
+) -> dict[str, float]:
+    if isinstance(value, bool):
+        return {"/".join(path): 1.0 if value else 0.0}
+    if isinstance(value, int | float):
+        return {"/".join(path): float(value)}
+    if not isinstance(value, Mapping):
+        return {}
+
+    metrics: dict[str, float] = {}
+    for key, item in value.items():
+        metrics.update(
+            _extract_numeric_leaf_metrics(
+                value=item,
+                path=[*path, _safe_metric_component(key)],
+            )
+        )
+    return metrics
+
+
+def _extract_evidently_metrics(
+    report_payload: dict[str, Any],
+    *,
+    comparison: str,
+    column_drift: dict[str, bool],
+) -> dict[str, float]:
+    metrics: dict[str, float] = {}
+    prefix = f"drift/{comparison}"
+    for metric in report_payload.get("metrics", []):
+        if not isinstance(metric, Mapping):
+            continue
+        config = metric.get("config", {})
+        if not isinstance(config, Mapping):
+            config = {}
+        value = metric.get("value")
+        column = config.get("column")
+        if isinstance(column, str) and isinstance(value, int | float | bool):
+            method = config.get("method") or _metric_type_name(config, metric)
+            metric_path = (
+                f"{prefix}/{_safe_metric_component(column)}/"
+                f"{_safe_metric_component(method)}"
+            )
+            metrics[metric_path] = 1.0 if isinstance(value, bool) and value else float(value)
+            continue
+
+        metric_name = _safe_metric_component(_metric_type_name(config, metric))
+        for relative_path, numeric_value in _extract_numeric_leaf_metrics(
+            value=value,
+            path=[metric_name],
+        ).items():
+            metrics[f"{prefix}/{relative_path}"] = numeric_value
+
+    for column, drifted in column_drift.items():
+        metrics[f"{prefix}/{_safe_metric_component(column)}/drifted"] = 1.0 if drifted else 0.0
+    return metrics
 
 
 def _extract_drift_summary(report_payload: dict[str, Any]) -> dict[str, Any]:
@@ -386,10 +462,7 @@ def _write_drift_html(
     report: Any,
     run_result: Any,
     html_path: Path,
-    title: str,
-    summary: dict[str, Any],
-    metadata: dict[str, Any],
-) -> None:
+) -> bool:
     export_errors: list[str] = []
     for source in (run_result, report):
         if source is None:
@@ -401,13 +474,13 @@ def _write_drift_html(
             try:
                 method(html_path)
                 if html_path.exists():
-                    return
+                    return True
             except TypeError as exc:
                 export_errors.append(str(exc))
                 try:
                     method(str(html_path))
                     if html_path.exists():
-                        return
+                        return True
                 except Exception as str_exc:
                     export_errors.append(str(str_exc))
             except Exception as exc:
@@ -423,15 +496,8 @@ def _write_drift_html(
                 rendered = None
             if isinstance(rendered, str):
                 html_path.write_text(rendered, encoding="utf-8")
-                return
-
-    fallback_metadata = dict(metadata)
-    if export_errors:
-        fallback_metadata["native_html_export_errors"] = len(export_errors)
-    html_path.write_text(
-        drift_fallback_html(title=title, summary=summary, metadata=fallback_metadata),
-        encoding="utf-8",
-    )
+                return True
+    return False
 
 
 def drift_report(
@@ -531,6 +597,13 @@ def drift_report(
         f"drift/{safe_comparison}/n_drifted_columns": float(summary["n_drifted_columns"]),
         f"drift/{safe_comparison}/share_drifted_columns": float(summary["share_drifted_columns"]),
     }
+    metrics.update(
+        _extract_evidently_metrics(
+            report_payload,
+            comparison=safe_comparison,
+            column_drift=column_drift,
+        )
+    )
     important_summary: dict[str, Any] | None = None
     if resolved_important_features:
         important_summary = _important_feature_summary(
@@ -602,7 +675,6 @@ def drift_report(
     artifacts: dict[str, Any] = {}
     html_path: Path | None = None
     if include_html:
-        title = report_name or "Data Drift Report"
         keep_local = should_keep_html_artifact(experiment_name=experiment_name)
         with artifact_workspace(keep_local=keep_local) as workspace:
             html_path = local_html_artifact_path(
@@ -610,14 +682,23 @@ def drift_report(
                 "drift_report.html",
                 report_name=report_name,
             )
-            _write_drift_html(
+            exported = _write_drift_html(
                 report=report,
                 run_result=run_result,
                 html_path=html_path,
-                title=title,
-                summary=summary,
-                metadata=metadata,
             )
+            if not exported:
+                metadata["html_export_warning"] = "native_evidently_html_unavailable"
+                result = LumosResult(
+                    metrics=metrics,
+                    summary=summary,
+                    flagged=flagged,
+                    artifacts=artifacts,
+                    report=display_report_object,
+                    metadata=metadata,
+                )
+                log_result(result, experiment_name=experiment_name)
+                return result
             artifacts, _ = html_artifact_metadata(
                 html_path,
                 artifact_path="drift",
