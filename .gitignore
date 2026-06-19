@@ -12,3 +12,4 @@ build/
 *.egg-info/
 lumosai-artifacts/
 site/
+.env
