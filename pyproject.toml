@@ -4,6 +4,7 @@ version = "0.1.0"
 description = "Opinionated ML monitoring and reporting helpers."
 readme = "README.md"
 requires-python = ">=3.11"
+license = "MIT"
 dependencies = [
   "evidently>=0.4.38",
   "matplotlib>=3.8",
