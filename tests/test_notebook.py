@@ -165,3 +165,27 @@ def test_display_report_displays_artifact_metadata_when_no_local_html(
 
     assert returned is None
     assert displayed == [artifact]
+
+
+def test_display_report_embeds_cached_mlflow_html_artifact(
+    monkeypatch: pytest.MonkeyPatch,
+    tmp_path: Path,
+) -> None:
+    from lumosai import notebook
+
+    displayed: list[Any] = []
+    html_path = tmp_path / "profile.html"
+    html_path.write_text("<html><body>cached profile</body></html>", encoding="utf-8")
+    artifact = {
+        "local_path": str(html_path),
+        "mlflow_artifact_path": "profile/profile.html",
+    }
+    monkeypatch.setattr(notebook, "_display", displayed.append)
+
+    returned = notebook.display_report(LumosResult(artifacts={"html": artifact}))
+
+    assert returned is None
+    rendered = displayed[-1]
+    assert rendered.__class__.__name__ == "HTML"
+    assert "cached profile" in rendered.data
+    assert displayed != [artifact]

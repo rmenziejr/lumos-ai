@@ -195,6 +195,7 @@ def test_profile_rejects_conflicting_ydata_title(
 
 def test_profile_logs_mlflow_artifact_and_result_in_same_run(
     monkeypatch: pytest.MonkeyPatch,
+    tmp_path: Path,
 ) -> None:
     frame = pd.DataFrame({"value": [1, 2, 3]})
     started_runs: list[str] = []
@@ -240,13 +241,15 @@ def test_profile_logs_mlflow_artifact_and_result_in_same_run(
     fake_mlflow = FakeMlflow()
     monkeypatch.setattr("lumosai.data.profiling.ProfileReport", FakeProfileReport)
     monkeypatch.setattr("lumosai.mlflow.require_mlflow", lambda: fake_mlflow)
+    monkeypatch.setattr(settings.artifacts, "display_cache_dir", tmp_path)
 
     result = profile(frame, experiment_name="experiment")
 
     assert started_runs == ["run-1"]
     assert artifact_runs == ["run-1"]
     assert dict_runs == ["run-1"]
-    assert result.artifacts["html"] == {"mlflow_artifact_path": "profile/profile.html"}
+    assert result.artifacts["html"]["mlflow_artifact_path"] == "profile/profile.html"
+    assert Path(result.artifacts["html"]["local_path"]).exists()
 
 
 def test_profile_log_analysis_false_disables_mlflow_logging(

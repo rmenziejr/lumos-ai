@@ -83,6 +83,18 @@ def _native_display_object(report: Any) -> tuple[bool, Any | None]:
     return False, None
 
 
+def _html_artifact_local_path(html_artifact: Any) -> Path | None:
+    if isinstance(html_artifact, str):
+        path = Path(html_artifact)
+        return path if path.exists() else None
+    if isinstance(html_artifact, dict):
+        local_path = html_artifact.get("local_path")
+        if isinstance(local_path, str):
+            path = Path(local_path)
+            return path if path.exists() else None
+    return None
+
+
 def display_report(
     result: LumosResult,
     title: str | None = None,
@@ -109,8 +121,9 @@ def display_report(
             return None
 
     html_artifact = result.artifacts.get("html")
-    if isinstance(html_artifact, str) and Path(html_artifact).exists():
-        rendered = _html_iframe_srcdoc(Path(html_artifact), width=width, height=height)
+    html_path = _html_artifact_local_path(html_artifact)
+    if html_path is not None:
+        rendered = _html_iframe_srcdoc(html_path, width=width, height=height)
         _display(rendered)
         return None
 

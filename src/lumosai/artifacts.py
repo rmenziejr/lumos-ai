@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import re
+import shutil
 from collections.abc import Iterator
 from contextlib import contextmanager
 from pathlib import Path
@@ -78,7 +79,15 @@ def html_artifact_metadata(
     )
     if keep_local:
         return {"html": str(html_path)}, keep_local
-    return {"html": {"mlflow_artifact_path": f"{artifact_path}/{html_path.name}"}}, keep_local
+    artifact = {"mlflow_artifact_path": f"{artifact_path}/{html_path.name}"}
+    if loaded_settings.artifacts.cache_mlflow_html:
+        cache_dir = loaded_settings.artifacts.display_cache_dir / artifact_path
+        cache_dir.mkdir(parents=True, exist_ok=True)
+        cached_path = cache_dir / html_path.name
+        if html_path.resolve() != cached_path.resolve():
+            shutil.copyfile(html_path, cached_path)
+        artifact["local_path"] = str(cached_path)
+    return {"html": artifact}, keep_local
 
 
 def log_result_with_html_artifact(

@@ -29,7 +29,8 @@ Displays a `LumosResult` in a notebook.
 
 - Uses the native `result.report` display method first when available, such as Evidently report display or ydata-profiling notebook iframe output.
 - Falls back to an iframe for local `result.artifacts["html"]` paths.
-- Displays MLflow artifact metadata when the HTML artifact is remote-only.
+- Falls back to an iframe for cached MLflow HTML artifacts when `result.artifacts["html"]` includes `local_path`.
+- Displays MLflow artifact metadata only when the HTML artifact is remote-only and no cached local file is available.
 - Keeps `result.to_dict()` JSON-safe; native report objects are retained only on `result.report`.
 - Returns `None` so notebook cells do not echo duplicate report output.
 
@@ -60,6 +61,25 @@ Most report functions accept:
 For model reports, `target` is the outcome column. For profiling, `target` is also the outcome column and is moved to the first profiled column.
 
 `categorical_columns` is a semantic override, not a dataframe type conversion. Use it when a column's storage type is numeric or string-like but the report should treat it as categorical.
+
+## Artifact Display Cache
+
+When MLflow artifact logging is enabled, Lumos uploads HTML reports to MLflow and, by default, keeps a local display cache so notebook users can still call `display_report(result)` immediately.
+
+Cached HTML artifact metadata looks like:
+
+```python
+{
+    "local_path": ".lumosai-artifacts/display-cache/performance/report.html",
+    "mlflow_artifact_path": "performance/report.html",
+}
+```
+
+Settings:
+
+- `LUMOSAI_ARTIFACTS__CACHE_MLFLOW_HTML=true` keeps cached HTML for notebook display.
+- `LUMOSAI_ARTIFACTS__DISPLAY_CACHE_DIR=.lumosai-artifacts/display-cache` controls the cache directory.
+- `LUMOSAI_ARTIFACTS__KEEP_LOCAL=true` keeps the primary local artifact instead of treating MLflow as the durable artifact destination.
 
 ## Data APIs
 

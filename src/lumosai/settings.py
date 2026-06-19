@@ -12,6 +12,8 @@ class ArtifactSettings(BaseModel):
 
     keep_local: bool = False
     local_dir: Path | None = None
+    cache_mlflow_html: bool = True
+    display_cache_dir: Path = Path(".lumosai-artifacts/display-cache")
 
 
 class MLflowSettings(BaseModel):

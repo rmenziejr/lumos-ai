@@ -6,7 +6,7 @@ from typing import Any
 
 import pandas as pd
 
-from lumosai.artifacts import artifact_workspace, local_html_artifact_path
+from lumosai.artifacts import artifact_workspace, html_artifact_metadata, local_html_artifact_path
 from lumosai.data.ingest import to_pandas
 from lumosai.data.validation import require_columns
 from lumosai.exceptions import LumosOptionalDependencyError, LumosValidationError
@@ -183,12 +183,11 @@ def profile(
                 report_name=report_name,
             )
             report.to_file(html_path)
-            if keep_local:
-                artifacts["html"] = str(html_path)
-            else:
-                artifacts["html"] = {
-                    "mlflow_artifact_path": f"profile/{html_path.name}"
-                }
+            artifacts, _ = html_artifact_metadata(
+                html_path,
+                artifact_path="profile",
+                experiment_name=experiment_name,
+            )
             result = LumosResult(
                 summary={
                     "rows": len(profiled),

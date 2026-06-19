@@ -32,38 +32,131 @@ def _figure_html(fig: Any, alt: str) -> str:
 def _html_document(title: str, sections: list[tuple[str, str]]) -> str:
     safe_title = html.escape(title)
     body = "\n".join(
-        f"<section><h2>{html.escape(heading)}</h2>{content}</section>"
+        f'<section class="report-section"><h2>{html.escape(heading)}</h2>{content}</section>'
         for heading, content in sections
     )
     return f"""<!doctype html>
 <html lang="en">
 <head>
   <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
   <title>{safe_title}</title>
   <style>
+    :root {{
+      --bg: #f7f9fc;
+      --surface: #ffffff;
+      --surface-soft: #f8fafc;
+      --text: #17202a;
+      --muted: #5f6b7a;
+      --border: #d8dee8;
+      --accent: #246bfe;
+      --shadow: 0 10px 28px rgba(19, 36, 64, 0.08);
+    }}
+    * {{ box-sizing: border-box; }}
     body {{
-      color: #17202a;
+      background: var(--bg);
+      color: var(--text);
       font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
-      margin: 2rem;
+      line-height: 1.45;
+      margin: 0;
+      padding: 32px;
     }}
-    h1 {{ font-size: 1.6rem; margin-bottom: 1.5rem; }}
+    .report-shell {{
+      margin: 0 auto;
+      max-width: 1180px;
+    }}
+    .report-header {{
+      background: var(--surface);
+      border: 1px solid var(--border);
+      border-radius: 10px;
+      box-shadow: var(--shadow);
+      margin-bottom: 20px;
+      padding: 24px 28px;
+    }}
+    .eyebrow {{
+      color: var(--accent);
+      font-size: 0.72rem;
+      font-weight: 700;
+      letter-spacing: 0.08em;
+      margin: 0 0 8px;
+      text-transform: uppercase;
+    }}
+    h1 {{
+      font-size: 1.85rem;
+      font-weight: 700;
+      letter-spacing: 0;
+      line-height: 1.2;
+      margin: 0;
+    }}
     h2 {{
-      border-bottom: 1px solid #d8dee4;
-      font-size: 1.1rem;
-      margin-top: 2rem;
-      padding-bottom: 0.35rem;
+      border-bottom: 1px solid var(--border);
+      font-size: 1.05rem;
+      font-weight: 650;
+      letter-spacing: 0;
+      margin: 0 0 14px;
+      padding-bottom: 10px;
     }}
-    img {{ display: block; max-width: 960px; width: 100%; }}
-    section {{ margin-bottom: 1.5rem; }}
-    table {{ border-collapse: collapse; margin-top: 0.75rem; }}
-    th, td {{ border: 1px solid #d8dee4; padding: 0.35rem 0.55rem; text-align: right; }}
-    th:first-child, td:first-child {{ text-align: left; }}
-    th {{ background: #f6f8fa; }}
+    .report-section {{
+      background: var(--surface);
+      border: 1px solid var(--border);
+      border-radius: 10px;
+      box-shadow: var(--shadow);
+      margin-bottom: 18px;
+      overflow: hidden;
+      padding: 20px;
+    }}
+    img {{
+      display: block;
+      height: auto;
+      margin-top: 8px;
+      max-width: 980px;
+      width: 100%;
+    }}
+    table {{
+      border-collapse: collapse;
+      font-size: 0.92rem;
+      margin-top: 0.75rem;
+      min-width: 420px;
+      width: 100%;
+    }}
+    th, td {{
+      border-bottom: 1px solid var(--border);
+      padding: 0.55rem 0.7rem;
+      text-align: right;
+      vertical-align: top;
+    }}
+    th:first-child, td:first-child {{
+      color: var(--text);
+      font-weight: 600;
+      text-align: left;
+    }}
+    th {{
+      background: var(--surface-soft);
+      color: var(--muted);
+      font-size: 0.78rem;
+      letter-spacing: 0.02em;
+      text-transform: uppercase;
+    }}
+    tr:last-child td {{ border-bottom: 0; }}
+    @media (max-width: 720px) {{
+      body {{ padding: 16px; }}
+      .report-header, .report-section {{
+        border-radius: 8px;
+        padding: 16px;
+      }}
+      h1 {{ font-size: 1.45rem; }}
+      table {{ min-width: 0; }}
+    }}
   </style>
 </head>
 <body>
-  <h1>{safe_title}</h1>
-  {body}
+  <main class="report-shell">
+    <header class="report-header">
+      <p class="eyebrow">Lumos AI Report</p>
+      <h1>{safe_title}</h1>
+    </header>
+    {body}
+  </main>
 </body>
 </html>
 """
