@@ -81,6 +81,8 @@ Settings:
 - `LUMOSAI_ARTIFACTS__DISPLAY_CACHE_DIR=.lumosai-artifacts/display-cache` controls the cache directory.
 - `LUMOSAI_ARTIFACTS__KEEP_LOCAL=true` keeps the primary local artifact instead of treating MLflow as the durable artifact destination.
 
+First-party Lumos HTML reports use CSS-only tabs so saved MLflow artifacts and notebook iframes stay compact without requiring JavaScript. Native Evidently and ydata-profiling reports keep their upstream HTML behavior.
+
 ## Data APIs
 
 ### `profile(...)`
@@ -482,9 +484,10 @@ Computes group-wise model behavior across protected attributes.
 - `protected_attribute` can be a list of columns or a mapping of column names to numeric bins.
 - Classification reports include positive prediction rate for binary labels.
 - Regression reports include residual and error summaries.
+- The HTML report includes `Residuals by Group` for each protected attribute. Classification residuals use actual event minus predicted probability when `prediction_score` is available, otherwise actual event minus predicted label event. Regression residuals use `target - prediction`.
 - Missing and out-of-bin protected values are retained as explicit groups.
 - `include_plots=None` uses `settings.model.include_bias_plots`, which defaults to `True`.
-- Exports `result.artifacts["html"]` by default with group-size, metric comparison, and flagged-comparison sections.
+- Exports `result.artifacts["html"]` by default with group-size, metric comparison, residual-by-group, and flagged-comparison tabs.
 - Stores `feature_columns` and `categorical_columns` in metadata when provided.
 
 ### `feature_importance(...)`

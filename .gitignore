@@ -11,4 +11,5 @@ dist/
 build/
 *.egg-info/
 lumosai-artifacts/
+.lumosai-artifacts/
 site/

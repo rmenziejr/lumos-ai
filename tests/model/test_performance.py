@@ -113,6 +113,9 @@ def test_performance_report_creates_default_classification_html_artifact(
     html = html_path.read_text(encoding="utf-8")
     assert html_path.exists()
     assert "Holdout Performance" in html
+    assert 'class="report-tabs"' in html
+    assert 'type="radio"' in html
+    assert "checked" in html
     assert "ROC Curve" in html
     assert "Precision-Recall Curve" in html
     assert "Lift by Decile" in html
