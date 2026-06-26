@@ -13,3 +13,4 @@ build/
 lumosai-artifacts/
 .lumosai-artifacts/
 site/
+.env
