@@ -44,11 +44,11 @@ def performance_report(
     report_name: str | None = None,
     feature_columns: list[str] | None = None,
     categorical_columns: list[str] | None = None,
-    metrics: MetricPreset | list[PerformanceMetric] = "default",
     include_plots: bool | None = None,
-    profile: Literal["standard", "metrics_only"] = "standard",
     include_train_plots: bool = False,
     experiment_name: str | None = None,
+    metrics: MetricPreset | list[PerformanceMetric] = "default",
+    profile: Literal["standard", "metrics_only"] = "standard",
     mlflow_step: int | None = None,
     log_dict: bool | None = None,
 ) -> LumosResult:

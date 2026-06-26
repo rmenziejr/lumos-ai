@@ -113,6 +113,34 @@ def test_performance_report_filters_selected_metrics() -> None:
     assert result.metadata["metrics_argument"] == ["f1"]
 
 
+def test_performance_report_preserves_positional_include_plots_slot() -> None:
+    frame = pd.DataFrame(
+        {
+            "actual": [1.0, 2.0, 3.0, 4.0],
+            "prediction": [1.1, 1.9, 3.2, 3.7],
+        }
+    )
+
+    result = performance_report(
+        frame,
+        "actual",
+        "prediction",
+        None,
+        None,
+        None,
+        "regression",
+        None,
+        None,
+        None,
+        None,
+        None,
+        False,
+    )
+
+    assert result.artifacts == {}
+    assert "performance/rmse" in result.metrics
+
+
 def test_performance_report_metrics_only_profile_suppresses_artifacts(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
