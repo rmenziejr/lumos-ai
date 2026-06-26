@@ -3,6 +3,14 @@
 from typing import Any
 
 __all__ = [
+    "CLASSIFICATION_METRICS",
+    "CLASSIFICATION_PROBABILITY_METRICS",
+    "ClassificationMetric",
+    "MetricPreset",
+    "PERFORMANCE_METRICS",
+    "PerformanceMetric",
+    "REGRESSION_METRICS",
+    "RegressionMetric",
     "bias_report",
     "calibration_report",
     "feature_importance",
@@ -13,6 +21,19 @@ __all__ = [
 
 
 def __getattr__(name: str) -> Any:
+    if name in {
+        "CLASSIFICATION_METRICS",
+        "CLASSIFICATION_PROBABILITY_METRICS",
+        "ClassificationMetric",
+        "MetricPreset",
+        "PERFORMANCE_METRICS",
+        "PerformanceMetric",
+        "REGRESSION_METRICS",
+        "RegressionMetric",
+    }:
+        from lumosai.model import metrics
+
+        return getattr(metrics, name)
     if name == "bias_report":
         from lumosai.model.bias import bias_report
 

@@ -376,6 +376,10 @@ performance_report(
     include_plots=True,
     include_train_plots=False,
     experiment_name=None,
+    metrics="default",
+    profile="standard",
+    mlflow_step=None,
+    log_dict=None,
 )
 ```
 
@@ -395,6 +399,17 @@ Computes current-window model performance. When a scored train frame is provided
 - Exports `result.artifacts["html"]` by default with common diagnostics: confusion matrix, ROC, PR, and lift plots for scored classification reports; predicted-vs-actual and residual plots for regression reports.
 - Returns namespaced metrics under `performance/...`.
 - Stores `feature_columns` and `categorical_columns` in metadata when provided.
+
+Supported built-in performance metrics are exposed as constants:
+
+- `CLASSIFICATION_METRICS`: `("accuracy", "precision", "recall", "f1")`
+- `CLASSIFICATION_PROBABILITY_METRICS`: `("roc_auc", "pr_auc", "log_loss")`
+- `REGRESSION_METRICS`: `("mae", "rmse", "r2")`
+- `PERFORMANCE_METRICS`: all built-in names
+
+Use `metrics="default"` to read model metric settings, `metrics="all"` to compute every built-in metric for the task, or `metrics=[...]` to track an explicit subset. Probability metrics require `prediction_score`.
+
+Use `profile="metrics_only"` for fold validation and tuning loops. It suppresses plots, lift, and per-result JSON artifact logging by default while still logging scalar metrics. Pass `mlflow_step=<fold_index>` to log fold metrics as MLflow metric steps.
 
 ### `performance_drift_report(...)`
 

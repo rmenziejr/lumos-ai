@@ -79,7 +79,7 @@ When `experiment_name` is passed and an MLflow run is already active, `lumos-ai`
 
 ## Add Fold-Level Reports
 
-For cross-validation, keep the trial run as the parent and create a nested run for each fold. This is useful when a tuning job needs visibility into fold variance, not just the trial mean.
+For cross-validation, keep the trial run as the parent and log fold metrics as MLflow metric steps. This is useful when a tuning job needs visibility into fold variance, not just the trial mean, without producing a full artifact set for every fold.
 
 ```python
 import numpy as np
@@ -113,9 +113,11 @@ def objective_with_folds(trial):
                     prediction="prediction",
                     prediction_score="prediction_score",
                     score_labels=list(model.classes_),
-                    include_lift=True,
+                    metrics=["f1", "roc_auc", "pr_auc"],
+                    profile="metrics_only",
+                    mlflow_step=fold_index,
                     feature_columns=feature_columns,
-                    report_name=f"Trial {trial.number} Fold {fold_index} Performance",
+                    report_name="Fold Validation",
                     experiment_name=EXPERIMENT_NAME,
                 )
                 fold_scores.append(result.metrics["performance/f1"])
@@ -126,7 +128,7 @@ def objective_with_folds(trial):
         return mean_f1
 ```
 
-Fold-level reports add MLflow runs and artifacts, so they are best for smaller studies, late-stage searches, or debugging unstable trials. For broad sweeps, log only trial-level performance.
+Fold-level validation should use `profile="metrics_only"` so each fold logs scalar metrics at `mlflow_step=fold_index` while suppressing heavier plots, lift outputs, and per-result JSON artifact logging. Final training reports should use the standard profile so the selected model keeps the richer diagnostic artifacts.
 
 ## Final Training Report
 

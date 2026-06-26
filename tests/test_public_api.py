@@ -71,3 +71,18 @@ def test_performance_drift_public_api() -> None:
 
     assert lumosai.performance_drift_report is performance_drift_report
     assert callable(performance_drift_report)
+
+
+def test_metric_types_and_constants_public_api() -> None:
+    import lumosai
+    from lumosai.model import (
+        CLASSIFICATION_METRICS,
+        CLASSIFICATION_PROBABILITY_METRICS,
+        PERFORMANCE_METRICS,
+        REGRESSION_METRICS,
+    )
+
+    assert lumosai.CLASSIFICATION_METRICS is CLASSIFICATION_METRICS
+    assert lumosai.CLASSIFICATION_PROBABILITY_METRICS is CLASSIFICATION_PROBABILITY_METRICS
+    assert lumosai.REGRESSION_METRICS is REGRESSION_METRICS
+    assert lumosai.PERFORMANCE_METRICS is PERFORMANCE_METRICS
