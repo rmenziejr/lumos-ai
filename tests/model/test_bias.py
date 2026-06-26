@@ -56,8 +56,11 @@ def test_bias_report_creates_html_artifact_by_default(
     assert result.artifacts["html"] == str(html_path)
     html = html_path.read_text(encoding="utf-8")
     assert "Segment Bias" in html
+    assert 'class="report-tabs"' in html
     assert "Group Size: segment" in html
     assert "Metric Gap From Best Group: segment" in html
+    assert "Residuals by Group: segment" in html
+    assert "Residuals by Group segment" in html
     assert "Flagged Comparisons" in html
 
 

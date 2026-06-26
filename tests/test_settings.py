@@ -57,6 +57,11 @@ def test_metric_threshold_defaults_include_metric_direction() -> None:
         value=1.25,
         greater_is_better=False,
     )
+    assert loaded.model.metric_thresholds["log_loss"] == MetricThreshold(
+        mode="relative",
+        value=1.25,
+        greater_is_better=False,
+    )
 
 
 def test_model_importance_settings_defaults() -> None:
@@ -69,7 +74,7 @@ def test_model_importance_settings_defaults() -> None:
 def test_model_probability_metric_settings_defaults() -> None:
     loaded = Settings()
 
-    assert loaded.model.classification_probability_metrics == ["roc_auc", "pr_auc"]
+    assert loaded.model.classification_probability_metrics == ["roc_auc", "pr_auc", "log_loss"]
 
 
 def test_model_importance_settings_env_override(monkeypatch: MonkeyPatch) -> None:

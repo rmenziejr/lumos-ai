@@ -6,8 +6,16 @@ from lumosai.results import LumosResult, LumosRun
 from lumosai.settings import settings
 
 __all__ = [
+    "CLASSIFICATION_METRICS",
+    "CLASSIFICATION_PROBABILITY_METRICS",
+    "ClassificationMetric",
     "LumosResult",
     "LumosRun",
+    "MetricPreset",
+    "PERFORMANCE_METRICS",
+    "PerformanceMetric",
+    "REGRESSION_METRICS",
+    "RegressionMetric",
     "bias_report",
     "build_sample",
     "calibration_report",
@@ -30,6 +38,14 @@ def __getattr__(name: str) -> Any:
 
         return getattr(data, name)
     if name in {
+        "CLASSIFICATION_METRICS",
+        "CLASSIFICATION_PROBABILITY_METRICS",
+        "ClassificationMetric",
+        "MetricPreset",
+        "PERFORMANCE_METRICS",
+        "PerformanceMetric",
+        "REGRESSION_METRICS",
+        "RegressionMetric",
         "bias_report",
         "calibration_report",
         "feature_importance",

@@ -3,12 +3,18 @@ from __future__ import annotations
 import re
 import shutil
 from collections.abc import Iterator
-from contextlib import contextmanager
+from contextlib import contextmanager, nullcontext
 from pathlib import Path
 from tempfile import TemporaryDirectory
 from typing import Any
 
 from lumosai.settings import Settings, settings
+
+
+def require_mlflow() -> Any:
+    from lumosai.mlflow import require_mlflow as _require_mlflow
+
+    return _require_mlflow()
 
 
 @contextmanager
@@ -97,25 +103,41 @@ def log_result_with_html_artifact(
     artifact_path: str,
     experiment_name: str | None,
     loaded_settings: Settings = settings,
+    log_dict: bool | None = None,
+    mlflow_step: int | None = None,
 ) -> Any:
     """Log a Lumos result and optional HTML artifact in one MLflow run."""
-    from lumosai.mlflow import mlflow_run, resolve_experiment_name
+    from lumosai.exceptions import LumosConfigurationError
+    from lumosai.mlflow import configure_mlflow, resolve_experiment_name
+
+    if mlflow_step is not None:
+        result.metadata["mlflow_step"] = mlflow_step
 
     resolved = resolve_experiment_name(experiment_name, loaded_settings)
     if resolved is None:
         result.metadata["logged_to_mlflow"] = False
         return result
 
-    with mlflow_run(resolved, loaded_settings) as (mlflow, run_id):
-        if mlflow is None:
-            result.metadata["logged_to_mlflow"] = False
-            return result
+    should_log_dict = loaded_settings.mlflow.log_dicts if log_dict is None else log_dict
+    mlflow = require_mlflow()
+    configure_mlflow(mlflow, loaded_settings)
+    mlflow.set_experiment(resolved)
+
+    active_run = mlflow.active_run()
+    context = nullcontext(active_run) if active_run is not None else None
+    if context is None:
+        if loaded_settings.mlflow.run_mode == "require_active":
+            msg = "MLflow logging requested but no active run exists and run_mode='require_active'"
+            raise LumosConfigurationError(msg)
+        context = mlflow.start_run()
+
+    with context as run:
         result.metadata["logged_to_mlflow"] = True
-        result.metadata["mlflow_run_id"] = run_id
+        result.metadata["mlflow_run_id"] = run.info.run_id
         if result.metrics:
-            mlflow.log_metrics(result.metrics)
+            mlflow.log_metrics(result.metrics, step=mlflow_step)
         if html_path is not None and loaded_settings.mlflow.log_artifacts:
             mlflow.log_artifact(str(html_path), artifact_path=artifact_path)
-        if loaded_settings.mlflow.log_dicts:
+        if should_log_dict:
             mlflow.log_dict(result.to_dict(), "lumosai_result.json")
     return result

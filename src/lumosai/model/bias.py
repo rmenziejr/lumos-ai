@@ -103,6 +103,72 @@ def _group_y_score(
     return group_df[prediction_score]
 
 
+def _classification_residual_values(
+    df: pd.DataFrame,
+    *,
+    target: str,
+    prediction: str,
+    prediction_score: str | None,
+    favorable_label: Any | None,
+) -> pd.Series | None:
+    if favorable_label is None:
+        return None
+    actual_event = (df[target] == favorable_label).astype(float)
+    if prediction_score is None:
+        predicted_event = (df[prediction] == favorable_label).astype(float)
+        return actual_event - predicted_event
+
+    def positive_score(value: Any) -> float:
+        if isinstance(value, list | tuple | np.ndarray):
+            array = np.asarray(value, dtype=float)
+            return float(array[-1])
+        return float(value)
+
+    try:
+        predicted_score = df[prediction_score].map(positive_score)
+    except (TypeError, ValueError):
+        predicted_event = (df[prediction] == favorable_label).astype(float)
+        return actual_event - predicted_event
+    return actual_event - predicted_score
+
+
+def _residual_rows(
+    df: pd.DataFrame,
+    *,
+    groups: pd.Series,
+    target: str,
+    prediction: str,
+    prediction_score: str | None,
+    resolved_task: TaskType,
+    favorable_label: Any | None,
+) -> list[dict[str, Any]]:
+    if resolved_task == "regression":
+        residuals = pd.to_numeric(df[target], errors="coerce") - pd.to_numeric(
+            df[prediction],
+            errors="coerce",
+        )
+    else:
+        residuals = _classification_residual_values(
+            df,
+            target=target,
+            prediction=prediction,
+            prediction_score=prediction_score,
+            favorable_label=favorable_label,
+        )
+    if residuals is None:
+        return []
+
+    rows: list[dict[str, Any]] = []
+    for group, residual in zip(groups, residuals, strict=False):
+        try:
+            residual_value = float(residual)
+        except (TypeError, ValueError):
+            continue
+        if np.isfinite(residual_value):
+            rows.append({"group": str(group), "residual": residual_value})
+    return rows
+
+
 def _finite_metric_rows(
     by_group: list[dict[str, Any]],
     metric_name: str,
@@ -196,6 +262,7 @@ def bias_report(
     resolved_task = task_type or detect_task_type(current_pd[target], current_pd[prediction])
 
     summary: dict[str, Any] = {"by_attribute": {}}
+    residuals_by_attribute: dict[str, list[dict[str, Any]]] = {}
     flagged: list[dict[str, Any]] = []
 
     for attribute, bins in normalized.items():
@@ -206,6 +273,15 @@ def bias_report(
             _binary_favorable_label(current_pd[target], current_pd[prediction])
             if resolved_task == "classification"
             else None
+        )
+        residuals_by_attribute[attribute] = _residual_rows(
+            current_pd,
+            groups=groups,
+            target=target,
+            prediction=prediction,
+            prediction_score=prediction_score,
+            resolved_task=resolved_task,
+            favorable_label=favorable_label,
         )
 
         for group_name, group_df in working.groupby("_lumos_group", observed=False):
@@ -298,7 +374,12 @@ def bias_report(
                 report_name=report_name,
             )
             html_path.write_text(
-                bias_html(title=title, summary=summary, flagged=flagged),
+                bias_html(
+                    title=title,
+                    summary=summary,
+                    flagged=flagged,
+                    residuals_by_attribute=residuals_by_attribute,
+                ),
                 encoding="utf-8",
             )
             artifacts, _ = html_artifact_metadata(

@@ -17,6 +17,7 @@ from lumosai.settings import Settings
 class FakeMlflow:
     def __init__(self) -> None:
         self.metrics: dict[str, float] = {}
+        self.metric_step: int | None = None
         self.dicts: list[tuple[dict[str, Any], str]] = []
         self.artifacts: list[tuple[str, str | None]] = []
         self.experiment_name: str | None = None
@@ -27,8 +28,9 @@ class FakeMlflow:
     def active_run(self) -> Any | None:
         return SimpleNamespace(info=SimpleNamespace(run_id="active-run"))
 
-    def log_metrics(self, metrics: dict[str, float]) -> None:
+    def log_metrics(self, metrics: dict[str, float], step: int | None = None) -> None:
         self.metrics.update(metrics)
+        self.metric_step = step
 
     def log_dict(self, payload: dict[str, Any], artifact_file: str) -> None:
         self.dicts.append((payload, artifact_file))
@@ -80,6 +82,28 @@ def test_log_result_logs_metadata_before_dict(monkeypatch: pytest.MonkeyPatch) -
             "lumosai_result.json",
         )
     ]
+
+
+def test_log_result_passes_mlflow_step_and_honors_log_dict(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    fake_mlflow = FakeMlflow()
+    monkeypatch.setattr(mlflow_adapter, "require_mlflow", lambda: fake_mlflow)
+    result = LumosResult(metrics={"performance/f1": 1.0})
+
+    logged = log_result(
+        result,
+        experiment_name="experiment",
+        mlflow_step=3,
+        log_dict=False,
+    )
+
+    assert logged.metadata["logged_to_mlflow"] is True
+    assert logged.metadata["mlflow_run_id"] == "active-run"
+    assert logged.metadata["mlflow_step"] == 3
+    assert fake_mlflow.metrics == {"performance/f1": 1.0}
+    assert fake_mlflow.metric_step == 3
+    assert fake_mlflow.dicts == []
 
 
 def test_log_run_logs_combined_payload_without_relogging_metrics(

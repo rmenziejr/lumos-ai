@@ -31,10 +31,49 @@ def _figure_html(fig: Any, alt: str) -> str:
 
 def _html_document(title: str, sections: list[tuple[str, str]]) -> str:
     safe_title = html.escape(title)
-    body = "\n".join(
-        f'<section class="report-section"><h2>{html.escape(heading)}</h2>{content}</section>'
-        for heading, content in sections
+    tab_name = f"tabs-{abs(hash(title))}"
+    tab_inputs: list[str] = []
+    tab_labels: list[str] = []
+    tab_panels: list[str] = []
+    tab_state_css: list[str] = []
+    for index, (heading, content) in enumerate(sections):
+        tab_id = f"{tab_name}-{index}"
+        panel_id = f"{tab_id}-panel"
+        checked = " checked" if index == 0 else ""
+        safe_heading = html.escape(heading)
+        tab_inputs.append(
+            f'<input class="report-tab-input" type="radio" name="{tab_name}" '
+            f'id="{tab_id}"{checked}>'
+        )
+        tab_labels.append(
+            f'<label class="report-tab-label" for="{tab_id}">{safe_heading}</label>'
+        )
+        tab_panels.append(
+            f'<section class="report-section report-tab-panel" id="{panel_id}">'
+            f"<h2>{safe_heading}</h2>{content}</section>"
+        )
+        tab_state_css.append(
+            f"#{tab_id}:checked ~ .report-tab-list label[for='{tab_id}'] {{"
+            " background: var(--surface);"
+            " border-color: var(--accent);"
+            " color: var(--text);"
+            " box-shadow: 0 8px 18px rgba(36, 107, 254, 0.12);"
+            "}"
+        )
+        tab_state_css.append(
+            f"#{tab_id}:checked ~ .report-tab-panels #{panel_id} {{ display: block; }}"
+        )
+    body = (
+        '<div class="report-tabs">'
+        + "\n".join(tab_inputs)
+        + '\n<div class="report-tab-list" role="tablist">'
+        + "\n".join(tab_labels)
+        + "</div>\n"
+        + '<div class="report-tab-panels">'
+        + "\n".join(tab_panels)
+        + "</div>\n</div>"
     )
+    tab_state_styles = "\n    ".join(tab_state_css)
     return f"""<!doctype html>
 <html lang="en">
 <head>
@@ -105,6 +144,41 @@ def _html_document(title: str, sections: list[tuple[str, str]]) -> str:
       overflow: hidden;
       padding: 20px;
     }}
+    .report-tabs {{
+      background: transparent;
+    }}
+    .report-tab-input {{
+      position: absolute;
+      opacity: 0;
+      pointer-events: none;
+    }}
+    .report-tab-list {{
+      display: flex;
+      flex-wrap: wrap;
+      gap: 8px;
+      margin: 0 0 16px;
+    }}
+    .report-tab-label {{
+      background: var(--surface-soft);
+      border: 1px solid var(--border);
+      border-radius: 999px;
+      color: var(--muted);
+      cursor: pointer;
+      display: inline-flex;
+      font-size: 0.88rem;
+      font-weight: 650;
+      line-height: 1;
+      padding: 10px 14px;
+      user-select: none;
+    }}
+    .report-tab-label:hover {{
+      border-color: var(--accent);
+      color: var(--text);
+    }}
+    .report-tab-panel {{
+      display: none;
+    }}
+    {tab_state_styles}
     img {{
       display: block;
       height: auto;
@@ -146,6 +220,14 @@ def _html_document(title: str, sections: list[tuple[str, str]]) -> str:
       }}
       h1 {{ font-size: 1.45rem; }}
       table {{ min-width: 0; }}
+    }}
+    @media print {{
+      body {{ background: #ffffff; padding: 0; }}
+      .report-tab-list, .report-tab-input {{ display: none; }}
+      .report-tab-panel {{ display: block; break-inside: avoid; }}
+      .report-header, .report-section {{
+        box-shadow: none;
+      }}
     }}
   </style>
 </head>
@@ -564,6 +646,46 @@ def _bias_metric_gap_plot(rows: list[dict[str, Any]], *, attribute: str) -> str:
     return _figure_html(fig, f"Metric Gap From Best Group {attribute}")
 
 
+def _bias_residual_plot(rows: list[dict[str, Any]], *, attribute: str) -> str:
+    if not rows:
+        return "<p>No residuals available for this attribute.</p>"
+    frame = pd.DataFrame(rows)
+    if frame.empty or "group" not in frame or "residual" not in frame:
+        return "<p>No residuals available for this attribute.</p>"
+    frame["group"] = frame["group"].astype(str)
+    frame["residual"] = pd.to_numeric(frame["residual"], errors="coerce")
+    frame = frame.dropna(subset=["residual"])
+    if frame.empty:
+        return "<p>No residuals available for this attribute.</p>"
+
+    groups = sorted(frame["group"].unique().tolist())
+    residual_groups = [
+        frame.loc[frame["group"] == group, "residual"].to_numpy() for group in groups
+    ]
+    fig_width = max(7.0, 0.7 * len(groups) + 2.0)
+    fig, ax = plt.subplots(figsize=(fig_width, 4.5))
+    ax.boxplot(residual_groups, tick_labels=groups, showmeans=True)
+    for index, values in enumerate(residual_groups, start=1):
+        if len(values) == 0:
+            continue
+        offsets = np.linspace(-0.12, 0.12, num=len(values)) if len(values) > 1 else np.array([0.0])
+        ax.scatter(
+            np.full(len(values), index) + offsets,
+            values,
+            alpha=0.55,
+            s=24,
+            color="#246bfe",
+        )
+    ax.axhline(0.0, color="#6a737d", linestyle="--", linewidth=1)
+    ax.set(
+        xlabel=attribute,
+        ylabel="Residual",
+        title=f"Residuals by Group: {attribute}",
+    )
+    fig.tight_layout()
+    return _figure_html(fig, f"Residuals by Group {attribute}")
+
+
 def _bias_flag_table(flags: list[dict[str, Any]]) -> str:
     if not flags:
         return "<p>No flagged comparisons.</p>"
@@ -587,10 +709,17 @@ def _bias_flag_table(flags: list[dict[str, Any]]) -> str:
     )
 
 
-def bias_html(*, title: str, summary: dict[str, Any], flagged: list[dict[str, Any]]) -> str:
+def bias_html(
+    *,
+    title: str,
+    summary: dict[str, Any],
+    flagged: list[dict[str, Any]],
+    residuals_by_attribute: dict[str, list[dict[str, Any]]] | None = None,
+) -> str:
     sections: list[tuple[str, str]] = []
     by_attribute = summary.get("by_attribute", {})
     if isinstance(by_attribute, dict):
+        residuals_by_attribute = residuals_by_attribute or {}
         for attribute, attribute_summary in by_attribute.items():
             if not isinstance(attribute_summary, dict):
                 continue
@@ -607,6 +736,13 @@ def bias_html(*, title: str, summary: dict[str, Any], flagged: list[dict[str, An
                 (
                     f"Metric Gap From Best Group: {attribute}",
                     _bias_metric_gap_plot(rows, attribute=str(attribute)),
+                )
+            )
+            residual_rows = residuals_by_attribute.get(str(attribute), [])
+            sections.append(
+                (
+                    f"Residuals by Group: {attribute}",
+                    _bias_residual_plot(residual_rows, attribute=str(attribute)),
                 )
             )
     sections.append(("Flagged Comparisons", _bias_flag_table(flagged)))

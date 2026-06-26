@@ -81,6 +81,8 @@ Settings:
 - `LUMOSAI_ARTIFACTS__DISPLAY_CACHE_DIR=.lumosai-artifacts/display-cache` controls the cache directory.
 - `LUMOSAI_ARTIFACTS__KEEP_LOCAL=true` keeps the primary local artifact instead of treating MLflow as the durable artifact destination.
 
+First-party Lumos HTML reports use CSS-only tabs so saved MLflow artifacts and notebook iframes stay compact without requiring JavaScript. Native Evidently and ydata-profiling reports keep their upstream HTML behavior.
+
 ## Data APIs
 
 ### `profile(...)`
@@ -344,6 +346,7 @@ get_metrics(
     y_score=None,
     score_labels=None,
     task_type=None,
+    metrics="default",
     custom_metrics=None,
 )
 ```
@@ -371,9 +374,13 @@ performance_report(
     report_name=None,
     feature_columns=None,
     categorical_columns=None,
-    include_plots=True,
+    include_plots=None,
     include_train_plots=False,
     experiment_name=None,
+    metrics="default",
+    profile="standard",
+    mlflow_step=None,
+    log_dict=None,
 )
 ```
 
@@ -390,9 +397,21 @@ Computes current-window model performance. When a scored train frame is provided
 - When multiclass array scores omit `score_labels`, labels are inferred by sorting observed target/prediction labels and warning metadata is recorded.
 - Classification reports include ROC AUC and PR AUC when scores are supplied, plus log loss when probability-like scores are supplied.
 - Pass `include_lift=True` to add decile lift metrics under `performance/lift/<class>/...`.
+- `include_plots=None` follows the report profile: `profile="standard"` resolves omitted plots to on, while `profile="metrics_only"` resolves omitted plots to off.
 - Exports `result.artifacts["html"]` by default with common diagnostics: confusion matrix, ROC, PR, and lift plots for scored classification reports; predicted-vs-actual and residual plots for regression reports.
 - Returns namespaced metrics under `performance/...`.
 - Stores `feature_columns` and `categorical_columns` in metadata when provided.
+
+Supported built-in performance metrics are exposed as constants:
+
+- `CLASSIFICATION_METRICS`: `("accuracy", "precision", "recall", "f1")`
+- `CLASSIFICATION_PROBABILITY_METRICS`: `("roc_auc", "pr_auc", "log_loss")`
+- `REGRESSION_METRICS`: `("mae", "rmse", "r2")`
+- `PERFORMANCE_METRICS`: all built-in names
+
+Use `metrics="default"` to read model metric settings, `metrics="all"` to compute every built-in metric for the task, or `metrics=[...]` to track an explicit subset. Probability metrics require `prediction_score`.
+
+Use `profile="metrics_only"` for fold validation and tuning loops. It suppresses plots, lift, and per-result JSON artifact logging by default while still logging scalar metrics. Pass `mlflow_step=<fold_index>` to log fold metrics as MLflow metric steps.
 
 ### `performance_drift_report(...)`
 
@@ -482,9 +501,10 @@ Computes group-wise model behavior across protected attributes.
 - `protected_attribute` can be a list of columns or a mapping of column names to numeric bins.
 - Classification reports include positive prediction rate for binary labels.
 - Regression reports include residual and error summaries.
+- The HTML report includes `Residuals by Group` for each protected attribute. Classification residuals use actual event minus predicted probability when `prediction_score` is available, otherwise actual event minus predicted label event. Regression residuals use `target - prediction`.
 - Missing and out-of-bin protected values are retained as explicit groups.
 - `include_plots=None` uses `settings.model.include_bias_plots`, which defaults to `True`.
-- Exports `result.artifacts["html"]` by default with group-size, metric comparison, and flagged-comparison sections.
+- Exports `result.artifacts["html"]` by default with group-size, metric comparison, residual-by-group, and flagged-comparison tabs.
 - Stores `feature_columns` and `categorical_columns` in metadata when provided.
 
 ### `feature_importance(...)`

@@ -1,7 +1,7 @@
 from __future__ import annotations
 
 from collections.abc import Callable, Sequence
-from typing import Any, Literal
+from typing import Any, Literal, TypeAlias
 
 import numpy as np
 import pandas as pd
@@ -18,9 +18,41 @@ from sklearn.metrics import (  # type: ignore[import-untyped]
     root_mean_squared_error,
 )
 
+from lumosai.exceptions import LumosValidationError
 from lumosai.settings import MetricThreshold, settings
 
 TaskType = Literal["classification", "regression"]
+ClassificationMetric: TypeAlias = Literal[
+    "accuracy",
+    "precision",
+    "recall",
+    "f1",
+    "roc_auc",
+    "pr_auc",
+    "log_loss",
+]
+RegressionMetric: TypeAlias = Literal["mae", "rmse", "r2"]
+PerformanceMetric: TypeAlias = ClassificationMetric | RegressionMetric
+MetricPreset: TypeAlias = Literal["default", "all"]
+
+CLASSIFICATION_METRICS: tuple[ClassificationMetric, ...] = (
+    "accuracy",
+    "precision",
+    "recall",
+    "f1",
+)
+CLASSIFICATION_PROBABILITY_METRICS: tuple[ClassificationMetric, ...] = (
+    "roc_auc",
+    "pr_auc",
+    "log_loss",
+)
+REGRESSION_METRICS: tuple[RegressionMetric, ...] = ("mae", "rmse", "r2")
+PERFORMANCE_METRICS: tuple[PerformanceMetric, ...] = (
+    *CLASSIFICATION_METRICS,
+    *CLASSIFICATION_PROBABILITY_METRICS,
+    *REGRESSION_METRICS,
+)
+_SCORE_REQUIRED_METRICS = frozenset(CLASSIFICATION_PROBABILITY_METRICS)
 
 
 def detect_task_type(
@@ -39,47 +71,141 @@ def detect_task_type(
     return "classification"
 
 
+def _settings_default_metrics(task_type: TaskType) -> list[str]:
+    if task_type == "classification":
+        return [
+            *settings.model.classification_metrics,
+            *settings.model.classification_probability_metrics,
+        ]
+    return list(settings.model.regression_metrics)
+
+
+def _all_metrics(task_type: TaskType) -> list[str]:
+    if task_type == "classification":
+        return [*CLASSIFICATION_METRICS, *CLASSIFICATION_PROBABILITY_METRICS]
+    return list(REGRESSION_METRICS)
+
+
+def _resolve_metric_names(
+    *,
+    metrics: MetricPreset | list[PerformanceMetric],
+    task_type: TaskType,
+    has_scores: bool,
+) -> list[str]:
+    is_default_preset = metrics == "default"
+    if metrics == "default":
+        requested = _settings_default_metrics(task_type)
+    elif metrics == "all":
+        requested = _all_metrics(task_type)
+    elif isinstance(metrics, str):
+        msg = "metrics must be 'default', 'all', or a list of supported metric names"
+        raise LumosValidationError(msg)
+    else:
+        requested = list(metrics)
+
+    supported = set(PERFORMANCE_METRICS)
+    unknown = sorted(set(requested).difference(supported))
+    if unknown:
+        msg = "Unsupported metrics: " + ", ".join(unknown)
+        raise LumosValidationError(msg)
+
+    valid_for_task = set(_all_metrics(task_type))
+    mismatched = sorted(set(requested).difference(valid_for_task))
+    if mismatched:
+        msg = "Metrics are not valid for "
+        msg += f"{task_type}: " + ", ".join(mismatched)
+        raise LumosValidationError(msg)
+
+    score_required = sorted(set(requested).intersection(_SCORE_REQUIRED_METRICS))
+    if score_required and not has_scores:
+        if is_default_preset:
+            return [metric for metric in requested if metric not in _SCORE_REQUIRED_METRICS]
+        msg = "Metrics require prediction scores: " + ", ".join(score_required)
+        raise LumosValidationError(msg)
+
+    return requested
+
+
+def _validate_custom_metrics(
+    *,
+    requested_metrics: list[str],
+    custom_metrics: list[tuple[str, Callable[..., float]]] | None,
+) -> None:
+    custom_names = [name for name, _metric_func in custom_metrics or []]
+    duplicate_custom = sorted(name for name in set(custom_names) if custom_names.count(name) > 1)
+    if duplicate_custom:
+        msg = "Duplicate custom metric names: " + ", ".join(duplicate_custom)
+        raise LumosValidationError(msg)
+
+    built_in_collisions = sorted(set(custom_names).intersection(PERFORMANCE_METRICS))
+    requested_collisions = sorted(set(custom_names).intersection(requested_metrics))
+    collisions = sorted(set(built_in_collisions + requested_collisions))
+    if collisions:
+        msg = "Custom metric names collide with built-in metrics: "
+        msg += ", ".join(collisions)
+        raise LumosValidationError(msg)
+
+
 def get_metrics(
     y_true: Sequence[Any] | pd.Series,
     y_pred: Sequence[Any] | pd.Series,
     y_score: Sequence[Any] | pd.Series | None = None,
     score_labels: Sequence[Any] | None = None,
     task_type: TaskType | None = None,
+    metrics: MetricPreset | list[PerformanceMetric] = "default",
     custom_metrics: list[tuple[str, Callable[..., float]]] | None = None,
 ) -> dict[str, float]:
     """Compute standard classification or regression metrics."""
 
     resolved_task = task_type or detect_task_type(y_true, y_pred)
-    metrics: dict[str, float] = {}
+    requested_metrics = _resolve_metric_names(
+        metrics=metrics,
+        task_type=resolved_task,
+        has_scores=y_score is not None,
+    )
+    _validate_custom_metrics(
+        requested_metrics=requested_metrics,
+        custom_metrics=custom_metrics,
+    )
+    computed: dict[str, float] = {}
 
     if resolved_task == "classification":
         average = "weighted"
         zero_division = 0
-        metrics["accuracy"] = float(accuracy_score(y_true, y_pred))
-        metrics["precision"] = float(
-            precision_score(y_true, y_pred, average=average, zero_division=zero_division)
-        )
-        metrics["recall"] = float(
-            recall_score(y_true, y_pred, average=average, zero_division=zero_division)
-        )
-        metrics["f1"] = float(
-            f1_score(y_true, y_pred, average=average, zero_division=zero_division)
-        )
-        if y_score is not None:
-            metrics["roc_auc"] = _roc_auc(y_true, y_score, score_labels)
-            metrics["pr_auc"] = _pr_auc(y_true, y_score, score_labels)
+        if "accuracy" in requested_metrics:
+            computed["accuracy"] = float(accuracy_score(y_true, y_pred))
+        if "precision" in requested_metrics:
+            computed["precision"] = float(
+                precision_score(y_true, y_pred, average=average, zero_division=zero_division)
+            )
+        if "recall" in requested_metrics:
+            computed["recall"] = float(
+                recall_score(y_true, y_pred, average=average, zero_division=zero_division)
+            )
+        if "f1" in requested_metrics:
+            computed["f1"] = float(
+                f1_score(y_true, y_pred, average=average, zero_division=zero_division)
+            )
+        if y_score is not None and "roc_auc" in requested_metrics:
+            computed["roc_auc"] = _roc_auc(y_true, y_score, score_labels)
+        if y_score is not None and "pr_auc" in requested_metrics:
+            computed["pr_auc"] = _pr_auc(y_true, y_score, score_labels)
+        if y_score is not None and "log_loss" in requested_metrics:
             log_loss_value = _log_loss(y_true, y_score, score_labels)
             if log_loss_value is not None:
-                metrics["log_loss"] = log_loss_value
+                computed["log_loss"] = log_loss_value
     else:
-        metrics["mae"] = float(mean_absolute_error(y_true, y_pred))
-        metrics["rmse"] = float(root_mean_squared_error(y_true, y_pred))
-        metrics["r2"] = float(r2_score(y_true, y_pred))
+        if "mae" in requested_metrics:
+            computed["mae"] = float(mean_absolute_error(y_true, y_pred))
+        if "rmse" in requested_metrics:
+            computed["rmse"] = float(root_mean_squared_error(y_true, y_pred))
+        if "r2" in requested_metrics:
+            computed["r2"] = float(r2_score(y_true, y_pred))
 
     for name, metric_func in custom_metrics or []:
-        metrics[name] = float(metric_func(y_true, y_pred))
+        computed[name] = float(metric_func(y_true, y_pred))
 
-    return metrics
+    return computed
 
 
 def _roc_auc(

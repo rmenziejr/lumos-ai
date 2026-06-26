@@ -2,7 +2,7 @@ from __future__ import annotations
 
 from collections.abc import Callable, Sequence
 from pathlib import Path
-from typing import Any, cast
+from typing import Any, Literal, cast
 
 from lumosai.artifacts import (
     artifact_workspace,
@@ -16,7 +16,13 @@ from lumosai.data.validation import require_columns
 from lumosai.exceptions import LumosValidationError
 from lumosai.mlflow import log_result
 from lumosai.model.lift import lift_metrics
-from lumosai.model.metrics import TaskType, detect_task_type, get_metrics
+from lumosai.model.metrics import (
+    MetricPreset,
+    PerformanceMetric,
+    TaskType,
+    detect_task_type,
+    get_metrics,
+)
 from lumosai.model.plots import performance_html
 from lumosai.model.scores import ScoreInput, normalize_classification_scores
 from lumosai.model.validation import validate_prediction_frame
@@ -38,15 +44,39 @@ def performance_report(
     report_name: str | None = None,
     feature_columns: list[str] | None = None,
     categorical_columns: list[str] | None = None,
-    include_plots: bool = True,
+    include_plots: bool | None = None,
     include_train_plots: bool = False,
     experiment_name: str | None = None,
+    metrics: MetricPreset | list[PerformanceMetric] = "default",
+    profile: Literal["standard", "metrics_only"] = "standard",
+    mlflow_step: int | None = None,
+    log_dict: bool | None = None,
 ) -> LumosResult:
     """Evaluate model predictions and return namespaced performance metrics.
 
     MLflow logging is enabled when `experiment_name` is provided or
     `settings.mlflow.default_experiment_name` is set.
     """
+    if profile not in {"standard", "metrics_only"}:
+        msg = "profile must be 'standard' or 'metrics_only'"
+        raise LumosValidationError(msg)
+
+    requested_metrics_argument = metrics if isinstance(metrics, str) else list(metrics)
+
+    if include_plots is None:
+        resolved_include_plots = profile != "metrics_only"
+    else:
+        resolved_include_plots = include_plots
+
+    if include_lift is None:
+        resolved_include_lift = False if profile == "metrics_only" else None
+    else:
+        resolved_include_lift = include_lift
+
+    if log_dict is None:
+        resolved_log_dict = False if profile == "metrics_only" else None
+    else:
+        resolved_log_dict = log_dict
 
     current_pd = to_pandas(current)
     validate_prediction_frame(
@@ -80,18 +110,19 @@ def performance_report(
         y_score=cast(Sequence[Any], scores.values) if scores is not None else None,
         score_labels=scores.labels if scores is not None else None,
         task_type=resolved_task,
+        metrics=metrics,
         custom_metrics=custom_metrics,
     )
     summary: dict[str, Any] = {"rows": len(current_pd), "metrics": raw_metrics}
     lift_summary: dict[str, Any] | None = None
-    if include_lift:
+    if resolved_include_lift:
         if resolved_task != "classification" or scores is None:
             msg = "include_lift=True requires classification prediction_score"
             raise LumosValidationError(msg)
         lift_raw_metrics, lift_summary = lift_metrics(current_pd[target], scores)
         raw_metrics.update(lift_raw_metrics)
         summary["lift"] = lift_summary
-    elif resolved_task == "classification" and scores is not None and include_plots:
+    elif resolved_task == "classification" and scores is not None and resolved_include_plots:
         _, lift_summary = lift_metrics(current_pd[target], scores)
 
     train_raw_metrics: dict[str, float] | None = None
@@ -127,6 +158,7 @@ def performance_report(
             y_score=cast(Sequence[Any], train_scores.values) if train_scores is not None else None,
             score_labels=train_scores.labels if train_scores is not None else None,
             task_type=resolved_task,
+            metrics=metrics,
             custom_metrics=custom_metrics,
         )
 
@@ -138,7 +170,14 @@ def performance_report(
         if train_raw_metrics is not None
         else {f"performance/{name}": value for name, value in raw_metrics.items()}
     )
-    metadata: dict[str, Any] = {"report_type": "performance", "task_type": resolved_task}
+    metadata: dict[str, Any] = {
+        "report_type": "performance",
+        "task_type": resolved_task,
+        "profile": profile,
+        "metrics_argument": requested_metrics_argument,
+    }
+    if mlflow_step is not None:
+        metadata["mlflow_step"] = mlflow_step
     if scores is not None:
         metadata.update(scores.metadata())
     if train_raw_metrics is not None:
@@ -161,7 +200,7 @@ def performance_report(
         metadata["categorical_columns"] = selected_categorical_columns
     artifacts: dict[str, Any] = {}
     html_path: Path | None = None
-    if include_plots:
+    if resolved_include_plots:
         title = report_name or "Model Performance Report"
         keep_local = should_keep_html_artifact(experiment_name=experiment_name)
         with artifact_workspace(keep_local=keep_local) as workspace:
@@ -199,6 +238,8 @@ def performance_report(
                 html_path=html_path,
                 artifact_path="performance",
                 experiment_name=experiment_name,
+                log_dict=resolved_log_dict,
+                mlflow_step=mlflow_step,
             )
     result = LumosResult(
         metrics=metrics,
@@ -206,7 +247,12 @@ def performance_report(
         artifacts=artifacts,
         metadata=metadata,
     )
-    log_result(result, experiment_name=experiment_name)
+    log_result(
+        result,
+        experiment_name=experiment_name,
+        log_dict=resolved_log_dict,
+        mlflow_step=mlflow_step,
+    )
     return result
 
 
