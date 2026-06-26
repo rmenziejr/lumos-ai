@@ -78,11 +78,11 @@ def test_metric_types_and_constants_public_api() -> None:
     from lumosai.model import (
         CLASSIFICATION_METRICS,
         CLASSIFICATION_PROBABILITY_METRICS,
+        PERFORMANCE_METRICS,
+        REGRESSION_METRICS,
         ClassificationMetric,
         MetricPreset,
-        PERFORMANCE_METRICS,
         PerformanceMetric,
-        REGRESSION_METRICS,
         RegressionMetric,
     )
 
