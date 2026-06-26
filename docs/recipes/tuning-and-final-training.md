@@ -99,28 +99,27 @@ def objective_with_folds(trial):
         mlflow.log_params(params)
 
         for fold_index, (train_index, valid_index) in enumerate(cv.split(train_frame, train_frame[target])):
-            with mlflow.start_run(run_name=f"fold-{fold_index}", nested=True):
-                fold_train = train_frame.iloc[train_index]
-                fold_valid = train_frame.iloc[valid_index]
+            fold_train = train_frame.iloc[train_index]
+            fold_valid = train_frame.iloc[valid_index]
 
-                model = build_model(params)
-                model.fit(fold_train[feature_columns], fold_train[target])
+            model = build_model(params)
+            model.fit(fold_train[feature_columns], fold_train[target])
 
-                fold_scored = score_validation(model, fold_valid, feature_columns)
-                result = performance_report(
-                    fold_scored,
-                    target=target,
-                    prediction="prediction",
-                    prediction_score="prediction_score",
-                    score_labels=list(model.classes_),
-                    metrics=["f1", "roc_auc", "pr_auc"],
-                    profile="metrics_only",
-                    mlflow_step=fold_index,
-                    feature_columns=feature_columns,
-                    report_name="Fold Validation",
-                    experiment_name=EXPERIMENT_NAME,
-                )
-                fold_scores.append(result.metrics["performance/f1"])
+            fold_scored = score_validation(model, fold_valid, feature_columns)
+            result = performance_report(
+                fold_scored,
+                target=target,
+                prediction="prediction",
+                prediction_score="prediction_score",
+                score_labels=list(model.classes_),
+                metrics=["f1", "roc_auc", "pr_auc"],
+                profile="metrics_only",
+                mlflow_step=fold_index,
+                feature_columns=feature_columns,
+                report_name="Fold Validation",
+                experiment_name=EXPERIMENT_NAME,
+            )
+            fold_scores.append(result.metrics["performance/f1"])
 
         mean_f1 = float(np.mean(fold_scores))
         mlflow.log_metric("mean_fold_f1", mean_f1)
@@ -128,7 +127,7 @@ def objective_with_folds(trial):
         return mean_f1
 ```
 
-Fold-level validation should use `profile="metrics_only"` so each fold logs scalar metrics at `mlflow_step=fold_index` while suppressing heavier plots, lift outputs, and per-result JSON artifact logging. Final training reports should use the standard profile so the selected model keeps the richer diagnostic artifacts.
+Fold-level validation should use `profile="metrics_only"` so each fold logs scalar metrics at `mlflow_step=fold_index` on the active trial run while suppressing heavier plots, lift outputs, and per-result JSON artifact logging. Create per-fold nested runs only when you explicitly want separate child runs or fold-specific artifacts. Final training reports should use the standard profile so the selected model keeps the richer diagnostic artifacts.
 
 ## Final Training Report
 

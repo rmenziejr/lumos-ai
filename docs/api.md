@@ -346,6 +346,7 @@ get_metrics(
     y_score=None,
     score_labels=None,
     task_type=None,
+    metrics="default",
     custom_metrics=None,
 )
 ```
@@ -368,15 +369,15 @@ performance_report(
     score_labels=None,
     train=None,
     task_type=None,
+    metrics="default",
     custom_metrics=None,
     include_lift=None,
     report_name=None,
     feature_columns=None,
     categorical_columns=None,
-    include_plots=True,
+    include_plots=None,
     include_train_plots=False,
     experiment_name=None,
-    metrics="default",
     profile="standard",
     mlflow_step=None,
     log_dict=None,
@@ -396,6 +397,7 @@ Computes current-window model performance. When a scored train frame is provided
 - When multiclass array scores omit `score_labels`, labels are inferred by sorting observed target/prediction labels and warning metadata is recorded.
 - Classification reports include ROC AUC and PR AUC when scores are supplied, plus log loss when probability-like scores are supplied.
 - Pass `include_lift=True` to add decile lift metrics under `performance/lift/<class>/...`.
+- `include_plots=None` follows the report profile: `profile="standard"` resolves omitted plots to on, while `profile="metrics_only"` resolves omitted plots to off.
 - Exports `result.artifacts["html"]` by default with common diagnostics: confusion matrix, ROC, PR, and lift plots for scored classification reports; predicted-vs-actual and residual plots for regression reports.
 - Returns namespaced metrics under `performance/...`.
 - Stores `feature_columns` and `categorical_columns` in metadata when provided.

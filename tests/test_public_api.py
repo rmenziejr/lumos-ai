@@ -78,11 +78,19 @@ def test_metric_types_and_constants_public_api() -> None:
     from lumosai.model import (
         CLASSIFICATION_METRICS,
         CLASSIFICATION_PROBABILITY_METRICS,
+        ClassificationMetric,
+        MetricPreset,
         PERFORMANCE_METRICS,
+        PerformanceMetric,
         REGRESSION_METRICS,
+        RegressionMetric,
     )
 
     assert lumosai.CLASSIFICATION_METRICS is CLASSIFICATION_METRICS
     assert lumosai.CLASSIFICATION_PROBABILITY_METRICS is CLASSIFICATION_PROBABILITY_METRICS
     assert lumosai.REGRESSION_METRICS is REGRESSION_METRICS
     assert lumosai.PERFORMANCE_METRICS is PERFORMANCE_METRICS
+    assert lumosai.ClassificationMetric == ClassificationMetric
+    assert lumosai.RegressionMetric == RegressionMetric
+    assert lumosai.PerformanceMetric == PerformanceMetric
+    assert lumosai.MetricPreset == MetricPreset
