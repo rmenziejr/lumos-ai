@@ -71,12 +71,18 @@ def log_result(
     *,
     experiment_name: str | None = None,
     loaded_settings: Settings = settings,
+    log_dict: bool | None = None,
+    mlflow_step: int | None = None,
 ) -> LumosResult:
+    if mlflow_step is not None:
+        result.metadata["mlflow_step"] = mlflow_step
+
     resolved = resolve_experiment_name(experiment_name, loaded_settings)
     if resolved is None:
         result.metadata["logged_to_mlflow"] = False
         return result
 
+    should_log_dict = loaded_settings.mlflow.log_dicts if log_dict is None else log_dict
     context = mlflow_run(resolved, loaded_settings) if resolved else nullcontext((None, None))
     with context as (mlflow, run_id):
         if mlflow is None:
@@ -85,8 +91,8 @@ def log_result(
         result.metadata["logged_to_mlflow"] = True
         result.metadata["mlflow_run_id"] = run_id
         if result.metrics:
-            mlflow.log_metrics(result.metrics)
-        if loaded_settings.mlflow.log_dicts:
+            mlflow.log_metrics(result.metrics, step=mlflow_step)
+        if should_log_dict:
             mlflow.log_dict(result.to_dict(), "lumosai_result.json")
     return result
 

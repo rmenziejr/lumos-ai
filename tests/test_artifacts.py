@@ -1,9 +1,48 @@
 from __future__ import annotations
 
+from contextlib import nullcontext
 from pathlib import Path
+from types import SimpleNamespace
+from typing import Any
 
-from lumosai.artifacts import artifact_workspace, html_artifact_metadata
+import pytest
+
+import lumosai.artifacts as artifacts_adapter
+from lumosai.artifacts import (
+    artifact_workspace,
+    html_artifact_metadata,
+    log_result_with_html_artifact,
+)
+from lumosai.results import LumosResult
 from lumosai.settings import Settings
+
+
+class FakeMlflow:
+    def __init__(self) -> None:
+        self.metrics: dict[str, float] = {}
+        self.metric_step: int | None = None
+        self.dicts: list[tuple[dict[str, Any], str]] = []
+        self.artifacts: list[tuple[str, str | None]] = []
+        self.experiment_name: str | None = None
+
+    def set_experiment(self, experiment_name: str) -> None:
+        self.experiment_name = experiment_name
+
+    def active_run(self) -> Any | None:
+        return SimpleNamespace(info=SimpleNamespace(run_id="active-run"))
+
+    def start_run(self) -> Any:
+        return nullcontext(SimpleNamespace(info=SimpleNamespace(run_id="started-run")))
+
+    def log_metrics(self, metrics: dict[str, float], step: int | None = None) -> None:
+        self.metrics.update(metrics)
+        self.metric_step = step
+
+    def log_dict(self, payload: dict[str, Any], artifact_file: str) -> None:
+        self.dicts.append((payload, artifact_file))
+
+    def log_artifact(self, local_path: str, artifact_path: str | None = None) -> None:
+        self.artifacts.append((local_path, artifact_path))
 
 
 def test_artifact_workspace_uses_temp_dir_when_not_keeping_local() -> None:
@@ -64,3 +103,32 @@ def test_html_artifact_metadata_caches_mlflow_html_for_display(tmp_path: Path) -
     assert cached_path.exists()
     assert cached_path.read_text(encoding="utf-8") == "<html>report</html>"
     assert cached_path.parent == loaded.artifacts.display_cache_dir / "performance"
+
+
+def test_log_result_with_html_artifact_passes_mlflow_step_and_honors_log_dict(
+    monkeypatch: pytest.MonkeyPatch,
+    tmp_path: Path,
+) -> None:
+    fake_mlflow = FakeMlflow()
+    monkeypatch.setattr(artifacts_adapter, "require_mlflow", lambda: fake_mlflow)
+    loaded = Settings()
+    html_path = tmp_path / "report.html"
+    html_path.write_text("<html>report</html>", encoding="utf-8")
+    result = LumosResult(metrics={"performance/f1": 1.0})
+
+    logged = log_result_with_html_artifact(
+        result,
+        html_path=html_path,
+        artifact_path="performance",
+        experiment_name="experiment",
+        loaded_settings=loaded,
+        mlflow_step=4,
+        log_dict=False,
+    )
+
+    assert logged.metadata["logged_to_mlflow"] is True
+    assert logged.metadata["mlflow_run_id"] == "active-run"
+    assert logged.metadata["mlflow_step"] == 4
+    assert fake_mlflow.metrics == {"performance/f1": 1.0}
+    assert fake_mlflow.metric_step == 4
+    assert fake_mlflow.dicts == []

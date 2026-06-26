@@ -61,6 +61,7 @@ def test_performance_report_adds_train_holdout_gap_metrics() -> None:
         prediction_score="prediction_score",
         train=train,
         task_type="classification",
+        metrics="all",
         include_plots=False,
     )
 
@@ -85,6 +86,129 @@ def test_performance_report_adds_train_holdout_gap_metrics() -> None:
     assert "comparison" in result.summary
     assert result.metadata["train_metrics_included"] is True
     assert result.metadata["include_train_plots"] is False
+
+
+def test_performance_report_filters_selected_metrics() -> None:
+    frame = pd.DataFrame(
+        {
+            "actual": [0, 1, 1, 0],
+            "prediction": [0, 1, 0, 0],
+            "prediction_score": [0.1, 0.9, 0.45, 0.2],
+        }
+    )
+
+    result = performance_report(
+        frame,
+        target="actual",
+        prediction="prediction",
+        prediction_score="prediction_score",
+        task_type="classification",
+        metrics=["f1", "roc_auc"],
+        include_plots=False,
+    )
+
+    assert set(result.metrics) == {"performance/f1", "performance/roc_auc"}
+    assert set(result.summary["metrics"]) == {"f1", "roc_auc"}
+
+
+def test_performance_report_metrics_only_profile_suppresses_artifacts(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    frame = pd.DataFrame(
+        {
+            "actual": [0, 1, 1, 0],
+            "prediction": [0, 1, 0, 0],
+        }
+    )
+    captured: dict[str, object] = {}
+
+    def fake_log_result(
+        result: LumosResult,
+        *,
+        experiment_name: str | None = None,
+        log_dict: bool | None = None,
+        mlflow_step: int | None = None,
+    ) -> LumosResult:
+        captured["result"] = result
+        captured["experiment_name"] = experiment_name
+        captured["log_dict"] = log_dict
+        captured["mlflow_step"] = mlflow_step
+        return result
+
+    monkeypatch.setattr("lumosai.model.performance.log_result", fake_log_result)
+
+    result = performance_report(
+        frame,
+        target="actual",
+        prediction="prediction",
+        task_type="classification",
+        metrics=["f1"],
+        profile="metrics_only",
+        mlflow_step=2,
+        experiment_name="experiment",
+    )
+
+    assert result.artifacts == {}
+    assert captured["log_dict"] is False
+    assert captured["mlflow_step"] == 2
+    assert result.metadata["profile"] == "metrics_only"
+    assert result.metadata["mlflow_step"] == 2
+
+
+def test_performance_report_metrics_only_profile_allows_explicit_plots() -> None:
+    frame = pd.DataFrame(
+        {
+            "actual": [0, 1, 1, 0],
+            "prediction": [0, 1, 0, 0],
+        }
+    )
+
+    result = performance_report(
+        frame,
+        target="actual",
+        prediction="prediction",
+        task_type="classification",
+        metrics=["f1"],
+        profile="metrics_only",
+        include_plots=True,
+    )
+
+    assert "html" in result.artifacts
+
+
+def test_performance_report_train_comparison_respects_selected_metrics() -> None:
+    train = pd.DataFrame(
+        {
+            "actual": [0, 1, 1, 0],
+            "prediction": [0, 1, 1, 0],
+        }
+    )
+    holdout = pd.DataFrame(
+        {
+            "actual": [0, 1, 1, 0],
+            "prediction": [0, 1, 0, 0],
+        }
+    )
+
+    result = performance_report(
+        holdout,
+        target="actual",
+        prediction="prediction",
+        train=train,
+        task_type="classification",
+        metrics=["f1"],
+        include_plots=False,
+    )
+
+    assert set(result.metrics) == {
+        "performance/holdout/f1",
+        "performance/train/f1",
+        "performance/gap/f1",
+        "performance/ratio/f1",
+    }
+    assert set(result.summary["train_metrics"]) == {"f1"}
+    assert set(result.summary["holdout_metrics"]) == {"f1"}
+    assert set(result.summary["comparison"]) == {"f1"}
 
 
 def test_performance_report_creates_default_classification_html_artifact(
