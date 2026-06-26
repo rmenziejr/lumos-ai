@@ -57,6 +57,11 @@ def test_metric_threshold_defaults_include_metric_direction() -> None:
         value=1.25,
         greater_is_better=False,
     )
+    assert loaded.model.metric_thresholds["log_loss"] == MetricThreshold(
+        mode="relative",
+        value=1.25,
+        greater_is_better=False,
+    )
 
 
 def test_model_importance_settings_defaults() -> None:

@@ -386,6 +386,13 @@ def test_compare_metric_lower_is_better_relative_flag() -> None:
     assert comparison["ratio"] == pytest.approx(1.4)
 
 
+def test_compare_metric_log_loss_uses_default_lower_is_better_direction() -> None:
+    comparison = compare_metric("log_loss", group_value=1.4, best_value=1.0)
+
+    assert comparison["flagged"] is True
+    assert comparison["ratio"] == pytest.approx(1.4)
+
+
 def test_compare_metric_relative_uses_absolute_diff_when_baseline_non_positive() -> None:
     threshold = MetricThreshold(mode="relative", value=0.8, greater_is_better=True)
 

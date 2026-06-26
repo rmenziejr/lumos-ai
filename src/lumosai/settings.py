@@ -64,6 +64,7 @@ def default_metric_thresholds() -> dict[str, MetricThreshold]:
         ),
         "mae": MetricThreshold(mode="relative", value=1.25, greater_is_better=False),
         "rmse": MetricThreshold(mode="relative", value=1.25, greater_is_better=False),
+        "log_loss": MetricThreshold(mode="relative", value=1.25, greater_is_better=False),
     }
 
 
