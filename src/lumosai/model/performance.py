@@ -61,6 +61,8 @@ def performance_report(
         msg = "profile must be 'standard' or 'metrics_only'"
         raise LumosValidationError(msg)
 
+    requested_metrics_argument = metrics if isinstance(metrics, str) else list(metrics)
+
     if include_plots is None:
         resolved_include_plots = profile != "metrics_only"
     else:
@@ -172,7 +174,7 @@ def performance_report(
         "report_type": "performance",
         "task_type": resolved_task,
         "profile": profile,
-        "metrics_argument": metrics if isinstance(metrics, str) else list(metrics),
+        "metrics_argument": requested_metrics_argument,
     }
     if mlflow_step is not None:
         metadata["mlflow_step"] = mlflow_step

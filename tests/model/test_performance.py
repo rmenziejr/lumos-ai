@@ -86,6 +86,7 @@ def test_performance_report_adds_train_holdout_gap_metrics() -> None:
     assert "comparison" in result.summary
     assert result.metadata["train_metrics_included"] is True
     assert result.metadata["include_train_plots"] is False
+    assert result.metadata["metrics_argument"] == "all"
 
 
 def test_performance_report_filters_selected_metrics() -> None:
@@ -103,12 +104,13 @@ def test_performance_report_filters_selected_metrics() -> None:
         prediction="prediction",
         prediction_score="prediction_score",
         task_type="classification",
-        metrics=["f1", "roc_auc"],
+        metrics=["f1"],
         include_plots=False,
     )
 
-    assert set(result.metrics) == {"performance/f1", "performance/roc_auc"}
-    assert set(result.summary["metrics"]) == {"f1", "roc_auc"}
+    assert set(result.metrics) == {"performance/f1"}
+    assert set(result.summary["metrics"]) == {"f1"}
+    assert result.metadata["metrics_argument"] == ["f1"]
 
 
 def test_performance_report_metrics_only_profile_suppresses_artifacts(
