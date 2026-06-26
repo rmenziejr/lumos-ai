@@ -92,10 +92,14 @@ def _resolve_metric_names(
     task_type: TaskType,
     has_scores: bool,
 ) -> list[str]:
+    is_default_preset = metrics == "default"
     if metrics == "default":
         requested = _settings_default_metrics(task_type)
     elif metrics == "all":
         requested = _all_metrics(task_type)
+    elif isinstance(metrics, str):
+        msg = "metrics must be 'default', 'all', or a list of supported metric names"
+        raise LumosValidationError(msg)
     else:
         requested = list(metrics)
 
@@ -114,6 +118,8 @@ def _resolve_metric_names(
 
     score_required = sorted(set(requested).intersection(_SCORE_REQUIRED_METRICS))
     if score_required and not has_scores:
+        if is_default_preset:
+            return [metric for metric in requested if metric not in _SCORE_REQUIRED_METRICS]
         msg = "Metrics require prediction scores: " + ", ".join(score_required)
         raise LumosValidationError(msg)
 
@@ -126,9 +132,7 @@ def _validate_custom_metrics(
     custom_metrics: list[tuple[str, Callable[..., float]]] | None,
 ) -> None:
     custom_names = [name for name, _metric_func in custom_metrics or []]
-    duplicate_custom = sorted(
-        name for name in set(custom_names) if custom_names.count(name) > 1
-    )
+    duplicate_custom = sorted(name for name in set(custom_names) if custom_names.count(name) > 1)
     if duplicate_custom:
         msg = "Duplicate custom metric names: " + ", ".join(duplicate_custom)
         raise LumosValidationError(msg)

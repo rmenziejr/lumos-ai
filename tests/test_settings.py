@@ -69,7 +69,7 @@ def test_model_importance_settings_defaults() -> None:
 def test_model_probability_metric_settings_defaults() -> None:
     loaded = Settings()
 
-    assert loaded.model.classification_probability_metrics == ["roc_auc", "pr_auc"]
+    assert loaded.model.classification_probability_metrics == ["roc_auc", "pr_auc", "log_loss"]
 
 
 def test_model_importance_settings_env_override(monkeypatch: MonkeyPatch) -> None:

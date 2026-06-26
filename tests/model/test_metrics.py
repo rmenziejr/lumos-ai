@@ -54,6 +54,30 @@ def test_get_metrics_classification_uses_scores_for_roc_auc() -> None:
     assert metrics["pr_auc"] == 1.0
 
 
+def test_get_metrics_default_classification_skips_score_metrics_without_scores() -> None:
+    metrics = get_metrics([0, 1], [0, 1], task_type="classification")
+
+    assert metrics == {
+        "accuracy": 1.0,
+        "precision": 1.0,
+        "recall": 1.0,
+        "f1": 1.0,
+    }
+
+
+def test_get_metrics_default_classification_includes_log_loss_for_probabilities() -> None:
+    metrics = get_metrics(
+        y_true=[0, 1, 1, 0],
+        y_pred=[0, 1, 1, 0],
+        y_score=[0.1, 0.9, 0.8, 0.2],
+        task_type="classification",
+    )
+
+    assert metrics["roc_auc"] == 1.0
+    assert metrics["pr_auc"] == 1.0
+    assert metrics["log_loss"] == pytest.approx(log_loss([0, 1, 1, 0], [0.1, 0.9, 0.8, 0.2]))
+
+
 def test_get_metrics_filters_classification_metrics() -> None:
     metrics = get_metrics(
         [0, 1, 1, 0],
@@ -290,6 +314,13 @@ def test_get_metrics_filters_regression_metrics() -> None:
 def test_get_metrics_rejects_unknown_metric() -> None:
     with pytest.raises(LumosValidationError, match="Unsupported metrics: banana"):
         get_metrics([0, 1], [0, 1], task_type="classification", metrics=["banana"])
+
+
+@pytest.mark.parametrize("metrics", ["f1", "banana"])
+def test_get_metrics_rejects_non_preset_metric_strings(metrics: str) -> None:
+    expected = "metrics must be 'default', 'all', or a list of supported metric names"
+    with pytest.raises(LumosValidationError, match=expected):
+        get_metrics([0, 1], [0, 1], task_type="classification", metrics=metrics)
 
 
 def test_get_metrics_rejects_task_mismatched_metric() -> None:
