@@ -42,12 +42,13 @@ def test_get_metrics_classification_handles_string_labels() -> None:
         y_true=["no", "yes", "yes", "no"],
         y_pred=["no", "yes", "no", "no"],
         task_type="classification",
+        positive_label="yes",
     )
 
     assert metrics["accuracy"] == 0.75
-    assert metrics["precision"] == pytest.approx(0.8333333333)
-    assert metrics["recall"] == 0.75
-    assert metrics["f1"] == pytest.approx(0.7333333333)
+    assert metrics["precision"] == 1.0
+    assert metrics["recall"] == 0.5
+    assert metrics["f1"] == pytest.approx(0.6666666667)
 
 
 def test_get_metrics_multiclass_classification_uses_probability_matrix_for_roc_auc() -> None:
@@ -65,6 +66,12 @@ def test_get_metrics_multiclass_classification_uses_probability_matrix_for_roc_a
         task_type="classification",
     )
 
+    assert metrics["macro_precision"] == pytest.approx(1.0)
+    assert metrics["macro_recall"] == pytest.approx(1.0)
+    assert metrics["macro_f1"] == pytest.approx(1.0)
+    assert metrics["weighted_precision"] == pytest.approx(1.0)
+    assert metrics["weighted_recall"] == pytest.approx(1.0)
+    assert metrics["weighted_f1"] == pytest.approx(1.0)
     assert metrics["roc_auc"] == pytest.approx(1.0)
     assert metrics["pr_auc"] == pytest.approx(1.0)
 
@@ -98,6 +105,7 @@ def test_get_metrics_binary_roc_auc_uses_reversed_score_labels_for_2d_scores() -
         y_score=y_score,
         score_labels=["yes", "no"],
         task_type="classification",
+        positive_label="yes",
     )
 
     assert metrics["roc_auc"] == pytest.approx(1.0)
@@ -116,6 +124,7 @@ def test_get_metrics_binary_roc_auc_uses_score_labels_for_1d_scores() -> None:
         y_score=[0.9, 0.1, 0.2, 0.8],
         score_labels=["yes", "no"],
         task_type="classification",
+        positive_label="yes",
     )
 
     assert metrics["roc_auc"] == pytest.approx(1.0)
@@ -149,6 +158,7 @@ def test_get_metrics_mixed_explicit_score_labels_do_not_raise_raw_type_error() -
         y_score=np.array([[0.9, 0.1], [0.1, 0.9], [0.2, 0.8], [0.8, 0.2]]),
         score_labels=[0, "one"],
         task_type="classification",
+        positive_label=0,
     )
 
     assert metrics["roc_auc"] == pytest.approx(1.0)
