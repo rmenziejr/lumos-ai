@@ -15,6 +15,7 @@ from lumosai.artifacts import (
 )
 from lumosai.data.ingest import to_pandas
 from lumosai.data.validation import require_columns
+from lumosai.exceptions import LumosValidationError
 from lumosai.mlflow import log_result
 from lumosai.model.metrics import TaskType, compare_metric, detect_task_type, get_metrics
 from lumosai.model.plots import bias_html
@@ -34,13 +35,36 @@ def _normalize_protected_attribute(
     return protected_attribute
 
 
-def _group_series(df: pd.DataFrame, column: str, bins: list[float] | None) -> pd.Series:
+def _validate_max_bins(max_bins: int | None) -> None:
+    if max_bins is None:
+        return
+    if isinstance(max_bins, bool) or not isinstance(max_bins, int) or max_bins < 2:
+        msg = "max_bins must be an integer greater than or equal to 2, or None"
+        raise LumosValidationError(msg)
+
+
+def _group_series(
+    df: pd.DataFrame,
+    column: str,
+    bins: list[float] | None,
+    *,
+    max_bins: int | None,
+) -> pd.Series:
+    series = df[column]
     if bins is None:
-        return df[column].astype("object").where(df[column].notna(), "__missing__")
-    cut = pd.cut(df[column], bins=bins, include_lowest=True)
+        if (
+            max_bins is not None
+            and pd.api.types.is_numeric_dtype(series)
+            and series.nunique(dropna=True) > max_bins
+        ):
+            cut = pd.cut(series, bins=max_bins, include_lowest=True, duplicates="drop")
+            grouped = cut.astype("object")
+            return grouped.where(series.notna(), "__missing__")
+        return series.astype("object").where(series.notna(), "__missing__")
+    cut = pd.cut(series, bins=bins, include_lowest=True)
     grouped = cut.astype("object")
-    grouped = grouped.where(~df[column].isna(), "__missing__")
-    return grouped.where(cut.notna() | df[column].isna(), "__out_of_bin__")
+    grouped = grouped.where(series.notna(), "__missing__")
+    return grouped.where(cut.notna() | series.isna(), "__out_of_bin__")
 
 
 def _best_value(values: list[float], *, greater_is_better: bool) -> float:
@@ -170,13 +194,20 @@ def bias_report(
     categorical_columns: list[str] | None = None,
     include_plots: bool | None = None,
     experiment_name: str | None = None,
+    max_bins: int | None = 10,
 ) -> LumosResult:
     """Evaluate model performance parity across protected attribute groups.
+
+    Numeric protected attributes with more than `max_bins` distinct values are
+    automatically grouped into at most `max_bins` equal-width bins unless
+    explicit bin edges are provided. Set `max_bins=None` to disable automatic
+    binning.
 
     MLflow logging is enabled when `experiment_name` is provided or
     `settings.mlflow.default_experiment_name` is set.
     """
 
+    _validate_max_bins(max_bins)
     current_pd = to_pandas(current)
     validate_prediction_frame(
         current_pd,
@@ -199,7 +230,7 @@ def bias_report(
     flagged: list[dict[str, Any]] = []
 
     for attribute, bins in normalized.items():
-        groups = _group_series(current_pd, attribute, bins)
+        groups = _group_series(current_pd, attribute, bins, max_bins=max_bins)
         working = current_pd.assign(_lumos_group=groups)
         by_group: list[dict[str, Any]] = []
         favorable_label = (
@@ -276,7 +307,11 @@ def bias_report(
             "comparisons": comparisons,
         }
 
-    metadata: dict[str, Any] = {"report_type": "bias", "task_type": resolved_task}
+    metadata: dict[str, Any] = {
+        "report_type": "bias",
+        "task_type": resolved_task,
+        "max_bins": max_bins,
+    }
     if report_name is not None:
         metadata["report_name"] = report_name
     if feature_columns is not None:

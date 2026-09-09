@@ -553,13 +553,12 @@ def _bias_metric_gap_plot(rows: list[dict[str, Any]], *, attribute: str) -> str:
 
     labels = [f"{metric} / {group}" for metric, group, _ in gap_rows]
     gaps = [gap for _, _, gap in gap_rows]
-    x = np.arange(len(labels))
-    fig_width = max(8.0, 0.45 * len(labels) + 2.0)
-    fig, ax = plt.subplots(figsize=(fig_width, 4.5))
+    fig_height = max(4.0, 0.32 * len(labels) + 1.4)
+    fig, ax = plt.subplots(figsize=(8.0, fig_height))
     colors = ["#d73a49" if gap > 0 else "#2ea44f" for gap in gaps]
-    ax.bar(x, gaps, color=colors)
-    ax.set_xticks(x, labels, rotation=35, ha="right")
-    ax.set(ylabel="Gap From Best Group", title=f"Metric Gap From Best Group: {attribute}")
+    ax.barh(labels, gaps, color=colors)
+    ax.set(xlabel="Gap From Best Group", title=f"Metric Gap From Best Group: {attribute}")
+    ax.invert_yaxis()
     fig.tight_layout()
     return _figure_html(fig, f"Metric Gap From Best Group {attribute}")
 
