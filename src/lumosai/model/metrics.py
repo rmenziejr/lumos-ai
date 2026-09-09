@@ -46,28 +46,90 @@ def get_metrics(
     score_labels: Sequence[Any] | None = None,
     task_type: TaskType | None = None,
     custom_metrics: list[tuple[str, Callable[..., float]]] | None = None,
+    positive_label: Any = 1,
 ) -> dict[str, float]:
-    """Compute standard classification or regression metrics."""
+    """Compute standard classification or regression metrics.
+
+    Binary precision, recall, and F1 are calculated for ``positive_label``.
+    Multiclass classification reports both macro- and weighted-average
+    precision, recall, and F1 metrics.
+    """
 
     resolved_task = task_type or detect_task_type(y_true, y_pred)
     metrics: dict[str, float] = {}
 
     if resolved_task == "classification":
-        average = "weighted"
         zero_division = 0
+        labels = _classification_labels(y_true, y_pred)
         metrics["accuracy"] = float(accuracy_score(y_true, y_pred))
-        metrics["precision"] = float(
-            precision_score(y_true, y_pred, average=average, zero_division=zero_division)
-        )
-        metrics["recall"] = float(
-            recall_score(y_true, y_pred, average=average, zero_division=zero_division)
-        )
-        metrics["f1"] = float(
-            f1_score(y_true, y_pred, average=average, zero_division=zero_division)
-        )
+        if len(labels) == 2:
+            _validate_positive_label(labels, positive_label)
+            metrics["precision"] = float(
+                precision_score(
+                    y_true,
+                    y_pred,
+                    average="binary",
+                    pos_label=positive_label,
+                    zero_division=zero_division,
+                )
+            )
+            metrics["recall"] = float(
+                recall_score(
+                    y_true,
+                    y_pred,
+                    average="binary",
+                    pos_label=positive_label,
+                    zero_division=zero_division,
+                )
+            )
+            metrics["f1"] = float(
+                f1_score(
+                    y_true,
+                    y_pred,
+                    average="binary",
+                    pos_label=positive_label,
+                    zero_division=zero_division,
+                )
+            )
+        else:
+            for average in ("macro", "weighted"):
+                metrics[f"{average}_precision"] = float(
+                    precision_score(
+                        y_true,
+                        y_pred,
+                        average=average,
+                        zero_division=zero_division,
+                    )
+                )
+                metrics[f"{average}_recall"] = float(
+                    recall_score(
+                        y_true,
+                        y_pred,
+                        average=average,
+                        zero_division=zero_division,
+                    )
+                )
+                metrics[f"{average}_f1"] = float(
+                    f1_score(
+                        y_true,
+                        y_pred,
+                        average=average,
+                        zero_division=zero_division,
+                    )
+                )
         if y_score is not None:
-            metrics["roc_auc"] = _roc_auc(y_true, y_score, score_labels)
-            metrics["pr_auc"] = _pr_auc(y_true, y_score, score_labels)
+            metrics["roc_auc"] = _roc_auc(
+                y_true,
+                y_score,
+                score_labels,
+                positive_label=positive_label,
+            )
+            metrics["pr_auc"] = _pr_auc(
+                y_true,
+                y_score,
+                score_labels,
+                positive_label=positive_label,
+            )
             log_loss_value = _log_loss(y_true, y_score, score_labels)
             if log_loss_value is not None:
                 metrics["log_loss"] = log_loss_value
@@ -82,22 +144,47 @@ def get_metrics(
     return metrics
 
 
+def _classification_labels(
+    y_true: Sequence[Any] | pd.Series,
+    y_pred: Sequence[Any] | pd.Series,
+) -> list[Any]:
+    return (
+        pd.concat([pd.Series(y_true), pd.Series(y_pred)], ignore_index=True)
+        .dropna()
+        .unique()
+        .tolist()
+    )
+
+
+def _validate_positive_label(labels: Sequence[Any], positive_label: Any) -> None:
+    if not any(label == positive_label for label in labels):
+        msg = (
+            f"positive_label={positive_label!r} is not present in binary labels {list(labels)!r}; "
+            "pass positive_label explicitly"
+        )
+        raise ValueError(msg)
+
+
 def _roc_auc(
     y_true: Sequence[Any] | pd.Series,
     y_score: Sequence[Any] | pd.Series,
     score_labels: Sequence[Any] | None = None,
+    *,
+    positive_label: Any = 1,
 ) -> float:
     labels = list(score_labels) if score_labels is not None else _unique_true_labels(y_true)
     score_array = np.asarray(y_score)
     if len(labels) <= 2:
-        if score_array.ndim == 2:
-            if score_array.shape[1] != 2:
-                msg = "binary y_score must be one-dimensional or have two probability columns"
-                raise ValueError(msg)
-            score_array = _binary_roc_auc_scores(score_array, score_labels)
-        elif score_array.ndim == 1:
-            score_array = _binary_roc_auc_1d_scores(score_array, labels, score_labels)
-        return float(roc_auc_score(y_true, score_array))
+        true_labels = _unique_true_labels(y_true)
+        _validate_positive_label(true_labels, positive_label)
+        positive_scores = _binary_positive_scores(
+            score_array,
+            true_labels=true_labels,
+            score_labels=score_labels,
+            positive_label=positive_label,
+        )
+        events = (pd.Series(y_true) == positive_label).to_numpy(dtype=int)
+        return float(roc_auc_score(events, positive_scores))
     if score_labels is None:
         return float(
             roc_auc_score(
@@ -149,22 +236,23 @@ def _pr_auc(
     y_true: Sequence[Any] | pd.Series,
     y_score: Sequence[Any] | pd.Series,
     score_labels: Sequence[Any] | None = None,
+    *,
+    positive_label: Any = 1,
 ) -> float:
     true_labels = _unique_true_labels(y_true)
     score_labels_list = list(score_labels) if score_labels is not None else None
     labels = score_labels_list or true_labels
     score_array = np.asarray(y_score)
     if len(labels) <= 2:
-        if score_array.ndim == 2:
-            if score_array.shape[1] != 2:
-                msg = "binary y_score must be one-dimensional or have two probability columns"
-                raise ValueError(msg)
-            score_array = _binary_roc_auc_scores(score_array, score_labels)
-        elif score_array.ndim == 1:
-            score_array = _binary_roc_auc_1d_scores(score_array, true_labels, score_labels)
-        positive_label = _positive_label(true_labels)
+        _validate_positive_label(true_labels, positive_label)
+        positive_scores = _binary_positive_scores(
+            score_array,
+            true_labels=true_labels,
+            score_labels=score_labels,
+            positive_label=positive_label,
+        )
         events = (pd.Series(y_true) == positive_label).to_numpy(dtype=int)
-        return float(average_precision_score(events, score_array))
+        return float(average_precision_score(events, positive_scores))
 
     if score_labels is None:
         ordered_labels, labels_are_sortable = _sklearn_label_order(labels)
@@ -175,6 +263,35 @@ def _pr_auc(
         ordered_labels, ordered_scores, _ = _scores_in_sklearn_label_order(score_array, labels)
     events = pd.get_dummies(pd.Series(y_true)).reindex(columns=ordered_labels, fill_value=0)
     return float(average_precision_score(events, ordered_scores, average="weighted"))
+
+
+def _binary_positive_scores(
+    score_array: np.ndarray,
+    *,
+    true_labels: Sequence[Any],
+    score_labels: Sequence[Any] | None,
+    positive_label: Any,
+) -> np.ndarray:
+    if score_array.ndim == 2:
+        if score_array.shape[1] != 2:
+            msg = "binary y_score must be one-dimensional or have two probability columns"
+            raise ValueError(msg)
+        source_labels = list(score_labels) if score_labels is not None else _sklearn_label_order(true_labels)[0]
+        if len(source_labels) != 2 or positive_label not in source_labels:
+            msg = "binary score_labels must contain the configured positive_label"
+            raise ValueError(msg)
+        return score_array[:, source_labels.index(positive_label)]
+    if score_array.ndim != 1:
+        msg = "binary y_score must be one-dimensional or have two probability columns"
+        raise ValueError(msg)
+    if score_labels is None:
+        return score_array
+    source_labels = list(score_labels)
+    if len(source_labels) != 2 or positive_label not in source_labels:
+        msg = "binary score_labels must contain the configured positive_label"
+        raise ValueError(msg)
+    score_positive_label = source_labels[-1]
+    return score_array if score_positive_label == positive_label else 1 - score_array
 
 
 def _positive_label(
