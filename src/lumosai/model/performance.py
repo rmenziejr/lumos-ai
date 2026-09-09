@@ -18,7 +18,7 @@ from lumosai.mlflow import log_result
 from lumosai.model.lift import lift_metrics
 from lumosai.model.metrics import TaskType, detect_task_type, get_metrics
 from lumosai.model.plots import performance_html
-from lumosai.model.scores import ScoreInput, normalize_classification_scores
+from lumosai.model.scores import ClassificationScores, ScoreInput, normalize_classification_scores
 from lumosai.model.validation import validate_prediction_frame
 from lumosai.results import LumosResult
 from lumosai.schema import validate_categorical_columns
@@ -31,6 +31,7 @@ def performance_report(
     prediction: str,
     prediction_score: ScoreInput | None = None,
     score_labels: list[Any] | None = None,
+    positive_label: Any = 1,
     train: Any | None = None,
     task_type: TaskType | None = None,
     custom_metrics: list[tuple[str, Callable[..., float]]] | None = None,
@@ -43,6 +44,10 @@ def performance_report(
     experiment_name: str | None = None,
 ) -> LumosResult:
     """Evaluate model predictions and return namespaced performance metrics.
+
+    Binary classification metrics use ``positive_label`` (default ``1``).
+    Multiclass classification reports both macro- and weighted-average
+    precision, recall, and F1 metrics.
 
     MLflow logging is enabled when `experiment_name` is provided or
     `settings.mlflow.default_experiment_name` is set.
@@ -74,6 +79,7 @@ def performance_report(
         if resolved_task == "classification" and prediction_score is not None
         else None
     )
+    _set_binary_positive_label(scores, positive_label)
     raw_metrics = get_metrics(
         current_pd[target],
         current_pd[prediction],
@@ -81,6 +87,7 @@ def performance_report(
         score_labels=scores.labels if scores is not None else None,
         task_type=resolved_task,
         custom_metrics=custom_metrics,
+        positive_label=positive_label,
     )
     summary: dict[str, Any] = {"rows": len(current_pd), "metrics": raw_metrics}
     lift_summary: dict[str, Any] | None = None
@@ -121,6 +128,7 @@ def performance_report(
             if resolved_task == "classification" and prediction_score is not None
             else None
         )
+        _set_binary_positive_label(train_scores, positive_label)
         train_raw_metrics = get_metrics(
             train_pd[target],
             train_pd[prediction],
@@ -128,6 +136,7 @@ def performance_report(
             score_labels=train_scores.labels if train_scores is not None else None,
             task_type=resolved_task,
             custom_metrics=custom_metrics,
+            positive_label=positive_label,
         )
 
     metrics = (
@@ -141,6 +150,8 @@ def performance_report(
     metadata: dict[str, Any] = {"report_type": "performance", "task_type": resolved_task}
     if scores is not None:
         metadata.update(scores.metadata())
+    elif resolved_task == "classification" and _is_binary(current_pd[target], current_pd[prediction]):
+        metadata["positive_label"] = positive_label
     if train_raw_metrics is not None:
         summary["train_metrics"] = train_raw_metrics
         summary["holdout_metrics"] = raw_metrics
@@ -208,6 +219,24 @@ def performance_report(
     )
     log_result(result, experiment_name=experiment_name)
     return result
+
+
+def _set_binary_positive_label(scores: ClassificationScores | None, positive_label: Any) -> None:
+    if scores is None or len(scores.labels) != 2:
+        return
+    if not any(label == positive_label for label in scores.labels):
+        msg = (
+            f"positive_label={positive_label!r} is not present in binary score_labels "
+            f"{scores.labels!r}; pass positive_label explicitly"
+        )
+        raise LumosValidationError(msg)
+    scores.positive_label = positive_label
+
+
+def _is_binary(y_true: Any, y_pred: Any) -> bool:
+    import pandas as pd
+
+    return pd.concat([pd.Series(y_true), pd.Series(y_pred)], ignore_index=True).dropna().nunique() == 2
 
 
 def _metric_greater_is_better(metric: str) -> bool:
