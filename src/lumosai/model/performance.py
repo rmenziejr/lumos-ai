@@ -4,6 +4,8 @@ from collections.abc import Callable, Sequence
 from pathlib import Path
 from typing import Any, cast
 
+import pandas as pd
+
 from lumosai.artifacts import (
     artifact_workspace,
     html_artifact_metadata,
@@ -31,7 +33,6 @@ def performance_report(
     prediction: str,
     prediction_score: ScoreInput | None = None,
     score_labels: list[Any] | None = None,
-    positive_label: Any = 1,
     train: Any | None = None,
     task_type: TaskType | None = None,
     custom_metrics: list[tuple[str, Callable[..., float]]] | None = None,
@@ -42,6 +43,7 @@ def performance_report(
     include_plots: bool = True,
     include_train_plots: bool = False,
     experiment_name: str | None = None,
+    positive_label: Any = 1,
 ) -> LumosResult:
     """Evaluate model predictions and return namespaced performance metrics.
 
@@ -150,7 +152,9 @@ def performance_report(
     metadata: dict[str, Any] = {"report_type": "performance", "task_type": resolved_task}
     if scores is not None:
         metadata.update(scores.metadata())
-    elif resolved_task == "classification" and _is_binary(current_pd[target], current_pd[prediction]):
+    elif resolved_task == "classification" and _is_binary(
+        current_pd[target], current_pd[prediction]
+    ):
         metadata["positive_label"] = positive_label
     if train_raw_metrics is not None:
         summary["train_metrics"] = train_raw_metrics
@@ -234,9 +238,12 @@ def _set_binary_positive_label(scores: ClassificationScores | None, positive_lab
 
 
 def _is_binary(y_true: Any, y_pred: Any) -> bool:
-    import pandas as pd
-
-    return pd.concat([pd.Series(y_true), pd.Series(y_pred)], ignore_index=True).dropna().nunique() == 2
+    return (
+        pd.concat([pd.Series(y_true), pd.Series(y_pred)], ignore_index=True)
+        .dropna()
+        .nunique()
+        == 2
+    )
 
 
 def _metric_greater_is_better(metric: str) -> bool:
