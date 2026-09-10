@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import sys
+from pathlib import Path
 from types import SimpleNamespace
 
 import numpy as np
@@ -92,6 +93,34 @@ def test_feature_importance_logs_shap_explainer_to_same_mlflow_run(
     assert result.metadata["shap_serialize_model"] is False
 
 
+def test_feature_importance_logs_shap_explainer_with_html_artifact(
+    monkeypatch: pytest.MonkeyPatch,
+    tmp_path: Path,
+) -> None:
+    frame = _frame()
+    fake_mlflow = _FakeMLflow()
+    monkeypatch.setitem(sys.modules, "shap", SimpleNamespace(Explainer=_FakeExplainer))
+    monkeypatch.setattr("lumosai.mlflow.require_mlflow", lambda: fake_mlflow)
+    monkeypatch.setattr(settings.artifacts, "display_cache_dir", tmp_path)
+
+    result = feature_importance(
+        _model(frame),
+        frame,
+        target="target",
+        feature_columns=["signal", "noise"],
+        method="shap",
+        include_plots=True,
+        experiment_name="importance-test",
+        log_shap_explainer=True,
+    )
+
+    assert len(fake_mlflow.logged) == 1
+    assert result.metadata["mlflow_run_id"] == "run-123"
+    assert result.metadata["shap_explainer_logged"] is True
+    assert result.artifacts["shap_explainer"]["name"] == "shap-explainer"
+    assert "html" in result.artifacts
+
+
 def test_feature_importance_explicit_false_disables_shap_explainer_logging(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
@@ -136,6 +165,28 @@ def test_feature_importance_defaults_shap_explainer_logging_to_setting(
     )
 
     assert len(fake_mlflow.logged) == 1
+
+
+def test_feature_importance_without_mlflow_does_not_try_to_log_explainer(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    frame = _frame()
+    monkeypatch.setitem(sys.modules, "shap", SimpleNamespace(Explainer=_FakeExplainer))
+    monkeypatch.setattr(settings.mlflow, "default_experiment_name", None)
+
+    result = feature_importance(
+        _model(frame),
+        frame,
+        target="target",
+        feature_columns=["signal", "noise"],
+        method="shap",
+        include_plots=False,
+        log_shap_explainer=True,
+    )
+
+    assert result.metadata["logged_to_mlflow"] is False
+    assert result.metadata["shap_explainer_logged"] is False
+    assert "shap_explainer" not in result.artifacts
 
 
 def test_permutation_only_never_logs_shap_explainer(monkeypatch: pytest.MonkeyPatch) -> None:
