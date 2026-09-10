@@ -335,6 +335,31 @@ Fail-fast validation runs before report generation. The bundle validates require
 
 ## Model APIs
 
+### Performance metric types and constants
+
+Performance metric selection is typed with `Literal` aliases and mirrored by runtime constants:
+
+```python
+from lumosai.model import (
+    CLASSIFICATION_METRICS,
+    CLASSIFICATION_PROBABILITY_METRICS,
+    PERFORMANCE_METRICS,
+    REGRESSION_METRICS,
+    ClassificationMetric,
+    MetricPreset,
+    PerformanceMetric,
+    RegressionMetric,
+)
+```
+
+- `CLASSIFICATION_METRICS`: `("accuracy", "precision", "recall", "f1")`
+- `CLASSIFICATION_PROBABILITY_METRICS`: `("roc_auc", "pr_auc", "log_loss")`
+- `REGRESSION_METRICS`: `("mae", "rmse", "r2")`
+- `PERFORMANCE_METRICS`: all supported built-in metric families.
+- `MetricPreset`: `Literal["default", "all"]`.
+
+For multiclass classification, `precision`, `recall`, and `f1` are metric families. Selecting one preserves the established macro and weighted outputs; for example, `metrics=["precision"]` returns `macro_precision` and `weighted_precision`.
+
 ### `get_metrics(...)`
 
 ```python
@@ -345,15 +370,22 @@ get_metrics(
     score_labels=None,
     task_type=None,
     custom_metrics=None,
+    positive_label=1,
+    metrics="default",
 )
 ```
 
-Computes classification or regression metrics.
+Computes selected classification or regression metric families.
 
 - Auto-detects task type when not provided.
-- Supports classification metrics such as accuracy, precision, recall, F1, ROC AUC, PR AUC, and log loss when probability-like scores are supplied.
+- `metrics="default"` reads `settings.model.classification_metrics`, `settings.model.classification_probability_metrics`, or `settings.model.regression_metrics` for the resolved task.
+- `metrics="all"` computes every supported built-in metric family for the resolved task.
+- `metrics=[...]` computes exactly the selected built-in metric families; `metrics=[]` is valid when only custom metrics are desired.
+- Default classification selection silently omits probability metrics when `y_score` is unavailable. Explicitly requesting `roc_auc`, `pr_auc`, or `log_loss` without scores raises `LumosValidationError`.
+- Unknown or task-incompatible metric names raise `LumosValidationError`.
+- Custom metric names cannot duplicate one another or collide with built-in output names.
 - `score_labels` defines probability order for binary or multiclass scores. For 1D binary scores, the score is interpreted as the probability of `score_labels[-1]`.
-- Supports regression metrics such as MAE, RMSE, and R2.
+- Binary precision, recall, F1, ROC AUC, and PR AUC use `positive_label`; multiclass precision/recall/F1 retain macro and weighted outputs.
 
 ### `PerformancePlot`
 
@@ -393,11 +425,15 @@ performance_report(
     report_name=None,
     feature_columns=None,
     categorical_columns=None,
-    include_plots=True,
+    include_plots=None,
     include_train_plots=False,
     experiment_name=None,
     positive_label=1,
     plots: list[PerformancePlot] | None = None,
+    metrics="default",
+    profile="standard",
+    mlflow_step=None,
+    log_dict=None,
 )
 ```
 
@@ -408,24 +444,25 @@ Computes current-window model performance. When a scored train frame is provided
 - `prediction_score` is an optional score/probability column, a column of probability arrays, or a mapping of labels to probability columns.
 - `score_labels` defines probability order for binary or multiclass arrays. Pass `list(model.classes_)` for sklearn-style classifiers.
 - `positive_label` selects the event class for binary precision, recall, F1, ROC/PR score interpretation, lift/capture, threshold-performance, and decision-curve diagnostics. It defaults to `1` and must be present in the resolved binary labels.
+- `metrics="default"` uses the model metric settings; `metrics="all"` computes every built-in family for the task; `metrics=[...]` computes only the requested families. The same selection is applied to train and holdout data, and gap/ratio metrics are created only for outputs present in both splits.
+- `profile="standard"` is the normal rich-report mode. `profile="metrics_only"` defaults to no plots and `log_dict=False`, while scalar MLflow metrics remain enabled. This is intended for folds, tuning loops, and other repeated evaluations.
+- Plot precedence is: an explicit `plots=[...]` selection wins; otherwise explicit `include_plots=True/False` wins; otherwise `include_plots=None` follows the profile (`standard` renders all applicable plots, `metrics_only` renders none).
+- `include_lift=True` explicitly adds lift metrics and the structured lift summary even in `metrics_only` mode. Without it, lift calculations may still be used internally when a selected `lift` or `capture` plot needs them, but lift metrics are not added to the result.
+- `log_dict=True/False` explicitly controls MLflow JSON result logging. When omitted, `metrics_only` suppresses it and `standard` follows `settings.mlflow.log_dicts`.
+- `mlflow_step=<int>` is passed to MLflow metric logging and stored in `result.metadata["mlflow_step"]`; use this for fold indices or repeated evaluation steps without changing metric names.
 - `train` is an optional scored training frame with the same `target`, `prediction`, and optional `prediction_score` fields. When provided, metrics are emitted under `performance/train/...` and `performance/holdout/...` instead of the legacy unsplit `performance/...` keys.
 - `performance/gap/<metric>` compares train to holdout. For higher-is-better metrics such as ROC AUC and PR AUC, gap is `train - holdout`. For lower-is-better metrics such as log loss, MAE, and RMSE, gap is `holdout - train`.
 - `performance/ratio/<metric>` is `holdout / train`, which is useful for MLflow dashboards alongside the gap values.
 - `include_train_plots` records whether train plots were requested. Train metrics are available when `train` is provided; report HTML remains holdout-focused in this version.
-- `plots=None` preserves the default behavior and renders all plots applicable to the resolved task and available inputs.
-- `plots=[...]` renders exactly the selected applicable plots. Use `PerformancePlot` values for static type checking and IDE completion.
-- An explicit `plots` selection takes precedence over `include_plots`. `include_plots=False` remains supported for backward compatibility when `plots` is omitted.
 - Plot selections that do not apply to the resolved task raise `LumosValidationError` instead of being silently ignored.
 - When multiclass array scores omit `score_labels`, labels are inferred by sorting observed target/prediction labels and warning metadata is recorded.
-- Classification reports include ROC AUC and PR AUC when scores are supplied, plus log loss when probability-like scores are supplied.
-- Pass `include_lift=True` to add decile lift metrics under `performance/lift/<class>/...`.
 - Binary scored classification reports can render confusion matrix, ROC, precision-recall, lift, observed event rate with cumulative capture, threshold performance, and decision curve analysis.
 - `capture` sorts observations by predicted probability into score deciles. Bars show observed event rate by decile and the cumulative line shows the share of all positive events captured through each decile.
 - `threshold_performance` plots precision, recall/sensitivity, specificity, and F1 across probability thresholds.
 - `decision_curve` plots model net benefit against Treat All and Treat None strategies across probability thresholds. It is binary-only and uses `positive_label` as the event of interest.
 - Regression reports can render predicted-vs-actual, residuals-vs-prediction, residual distribution, and a residual Q-Q plot.
 - Returns namespaced metrics under `performance/...`.
-- Stores `feature_columns` and `categorical_columns` in metadata when provided.
+- Stores selected plots, profile, requested metric selection, feature columns, and categorical columns in metadata when applicable.
 
 Selective classification example:
 
@@ -438,11 +475,29 @@ result = performance_report(
     prediction="prediction",
     prediction_score="risk_probability",
     positive_label=1,
+    metrics=["f1", "roc_auc", "pr_auc"],
     plots=[
         PerformancePlot.CAPTURE,
         PerformancePlot.THRESHOLD_PERFORMANCE,
         PerformancePlot.DECISION_CURVE,
     ],
+)
+```
+
+Fold-validation example:
+
+```python
+result = performance_report(
+    fold_scored,
+    target="actual",
+    prediction="prediction",
+    prediction_score="prediction_score",
+    score_labels=list(model.classes_),
+    metrics=["f1", "roc_auc", "pr_auc"],
+    profile="metrics_only",
+    mlflow_step=fold_index,
+    report_name="Fold Validation",
+    experiment_name=EXPERIMENT_NAME,
 )
 ```
 
@@ -454,6 +509,7 @@ result = performance_report(
     target="actual",
     prediction="prediction",
     task_type="regression",
+    metrics=["mae", "rmse", "r2"],
     plots=[
         PerformancePlot.PREDICTED_VS_ACTUAL,
         PerformancePlot.RESIDUALS_VS_PREDICTION,
@@ -612,6 +668,9 @@ Relevant sample defaults live under `settings.data`:
 
 Relevant model defaults live under `settings.model`:
 
+- `classification_metrics`: default classification metric families used by `metrics="default"`; defaults to `accuracy`, `precision`, `recall`, and `f1`.
+- `classification_probability_metrics`: score-dependent classification metric families used by `metrics="default"` when scores are available; defaults to `roc_auc`, `pr_auc`, and `log_loss`.
+- `regression_metrics`: default regression metric families used by `metrics="default"`; defaults to `mae`, `rmse`, and `r2`.
 - `feature_importance_method`: default method for `feature_importance()` when `method=None`; defaults to `"both"`.
 - `include_feature_importance_plots`: default artifact behavior for `feature_importance()` when `include_plots=None`; defaults to `True`.
 - `include_bias_plots`: default artifact behavior for `bias_report()` when `include_plots=None`; defaults to `True`.
