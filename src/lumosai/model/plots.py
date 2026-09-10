@@ -336,7 +336,7 @@ def _threshold_performance_plot(
         fp = int(np.sum((predicted == 1) & (events == 0)))
         tn = int(np.sum((predicted == 0) & (events == 0)))
         fn = int(np.sum((predicted == 0) & (events == 1)))
-        precision = tp / (tp + fp) if tp + fp else 1.0
+        precision = tp / (tp + fp) if tp + fp else 0.0
         recall = tp / (tp + fn) if tp + fn else 0.0
         specificity = tn / (tn + fp) if tn + fp else 0.0
         f1 = 2 * precision * recall / (precision + recall) if precision + recall else 0.0
@@ -388,8 +388,10 @@ def _decision_curve_plot(
     ax.plot(thresholds, model_net_benefit, label="Model")
     ax.plot(thresholds, treat_all_net_benefit, linestyle="--", label="Treat All")
     ax.axhline(0.0, linestyle=":", label="Treat None")
+    upper = max(prevalence, max(model_net_benefit), max(treat_all_net_benefit))
     ax.set(
         xlim=(0, 1),
+        ylim=(-0.05, upper + 0.05),
         xlabel="Probability Threshold",
         ylabel="Net Benefit",
         title="Decision Curve Analysis",
