@@ -91,7 +91,10 @@ def log_result(
         result.metadata["logged_to_mlflow"] = True
         result.metadata["mlflow_run_id"] = run_id
         if result.metrics:
-            mlflow.log_metrics(result.metrics, step=mlflow_step)
+            if mlflow_step is None:
+                mlflow.log_metrics(result.metrics)
+            else:
+                mlflow.log_metrics(result.metrics, step=mlflow_step)
         if should_log_dict:
             mlflow.log_dict(result.to_dict(), "lumosai_result.json")
     return result
