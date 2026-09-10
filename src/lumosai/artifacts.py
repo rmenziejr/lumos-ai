@@ -119,7 +119,10 @@ def log_result_with_html_artifact(
         result.metadata["logged_to_mlflow"] = True
         result.metadata["mlflow_run_id"] = run_id
         if result.metrics:
-            mlflow.log_metrics(result.metrics, step=mlflow_step)
+            if mlflow_step is None:
+                mlflow.log_metrics(result.metrics)
+            else:
+                mlflow.log_metrics(result.metrics, step=mlflow_step)
         if html_path is not None and loaded_settings.mlflow.log_artifacts:
             mlflow.log_artifact(str(html_path), artifact_path=artifact_path)
         if should_log_dict:
