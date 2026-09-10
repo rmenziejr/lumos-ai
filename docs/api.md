@@ -629,6 +629,8 @@ feature_importance(
     report_name=None,
     include_plots=None,
     experiment_name=None,
+    log_shap_explainer=None,
+    shap_serialize_model=True,
 )
 ```
 
@@ -642,10 +644,32 @@ Computes model feature importance after training or evaluation.
 - `sample_size` optionally samples rows before computing importance.
 - `scoring`, `n_repeats`, and `random_state` apply to permutation importance.
 - `include_plots=None` uses `settings.model.include_feature_importance_plots`, which defaults to `True`.
+- `log_shap_explainer=None` uses `settings.model.log_shap`, which defaults to `True`. Explainer logging only applies when SHAP is actually computed (`method="shap"` or `method="both"`) and MLflow logging is configured.
+- When enabled, Lumos reuses the same `shap.Explainer` instance used for importance calculation and logs it as the MLflow model `shap-explainer` in the same run as the importance metrics and report artifacts.
+- The logged explainer model URI is stored in `result.artifacts["shap_explainer"]["model_uri"]`, and `result.metadata["shap_explainer_logged"]` records whether persistence occurred.
+- `shap_serialize_model=True` asks MLflow to serialize the explainer's underlying model using an MLflow model flavor. MLflow currently supports that path for scikit-learn and PyTorch models; set `shap_serialize_model=False` to use SHAP-native serialization for other model types.
+- Permutation-only importance never creates or logs a SHAP explainer, even if `log_shap_explainer=True` is passed.
 - Exports `result.artifacts["html"]` by default with permutation and/or SHAP importance plots.
 - Returns metrics under `importance/<method>/<feature>`.
 - Stores method-specific rows in `result.summary["methods"][method]["features"]`.
-- Stores method, feature columns, and optional `report_name` in metadata.
+- Stores method, feature columns, optional `report_name`, and SHAP explainer logging metadata when applicable.
+
+Example:
+
+```python
+importance = feature_importance(
+    model,
+    validation_frame,
+    target="actual",
+    feature_columns=feature_columns,
+    method="shap",
+    experiment_name="model-training",
+    log_shap_explainer=True,
+    shap_serialize_model=True,
+)
+
+explainer_uri = importance.artifacts["shap_explainer"]["model_uri"]
+```
 
 ## Settings
 
@@ -673,6 +697,7 @@ Relevant model defaults live under `settings.model`:
 - `regression_metrics`: default regression metric families used by `metrics="default"`; defaults to `mae`, `rmse`, and `r2`.
 - `feature_importance_method`: default method for `feature_importance()` when `method=None`; defaults to `"both"`.
 - `include_feature_importance_plots`: default artifact behavior for `feature_importance()` when `include_plots=None`; defaults to `True`.
+- `log_shap`: default SHAP explainer persistence behavior for `feature_importance(..., log_shap_explainer=None)`; defaults to `True`.
 - `include_bias_plots`: default artifact behavior for `bias_report()` when `include_plots=None`; defaults to `True`.
 - `performance_drift_psi_threshold`: default PSI flag threshold for `performance_drift_report()`; defaults to `0.2`.
 
@@ -685,6 +710,7 @@ Examples:
 - `LUMOSAI_ARTIFACTS__KEEP_LOCAL`
 - `LUMOSAI_DATA__DRIFT_SHARE_THRESHOLD`
 - `LUMOSAI_MODEL__METRIC_THRESHOLDS__RMSE__VALUE`
+- `LUMOSAI_MODEL__LOG_SHAP`
 
 The main settings groups are:
 
