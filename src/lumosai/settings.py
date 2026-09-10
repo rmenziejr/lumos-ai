@@ -64,6 +64,7 @@ def default_metric_thresholds() -> dict[str, MetricThreshold]:
         ),
         "mae": MetricThreshold(mode="relative", value=1.25, greater_is_better=False),
         "rmse": MetricThreshold(mode="relative", value=1.25, greater_is_better=False),
+        "log_loss": MetricThreshold(mode="relative", value=1.25, greater_is_better=False),
     }
 
 
@@ -74,7 +75,7 @@ class ModelSettings(BaseModel):
         default_factory=lambda: ["accuracy", "precision", "recall", "f1"]
     )
     classification_probability_metrics: list[str] = Field(
-        default_factory=lambda: ["roc_auc", "pr_auc"]
+        default_factory=lambda: ["roc_auc", "pr_auc", "log_loss"]
     )
     regression_metrics: list[str] = Field(default_factory=lambda: ["mae", "rmse", "r2"])
     metric_thresholds: dict[str, MetricThreshold] = Field(default_factory=default_metric_thresholds)

@@ -79,7 +79,7 @@ When `experiment_name` is passed and an MLflow run is already active, `lumos-ai`
 
 ## Add Fold-Level Reports
 
-For cross-validation, keep the trial run as the parent and create a nested run for each fold. This is useful when a tuning job needs visibility into fold variance, not just the trial mean.
+For cross-validation, keep the trial run as the parent and log each fold as an MLflow metric step. This preserves fold-level visibility without creating a nested MLflow run and a full artifact set for every fold.
 
 ```python
 import numpy as np
@@ -98,27 +98,30 @@ def objective_with_folds(trial):
     with mlflow.start_run(run_name=f"trial-{trial.number}", nested=True):
         mlflow.log_params(params)
 
-        for fold_index, (train_index, valid_index) in enumerate(cv.split(train_frame, train_frame[target])):
-            with mlflow.start_run(run_name=f"fold-{fold_index}", nested=True):
-                fold_train = train_frame.iloc[train_index]
-                fold_valid = train_frame.iloc[valid_index]
+        for fold_index, (train_index, valid_index) in enumerate(
+            cv.split(train_frame, train_frame[target])
+        ):
+            fold_train = train_frame.iloc[train_index]
+            fold_valid = train_frame.iloc[valid_index]
 
-                model = build_model(params)
-                model.fit(fold_train[feature_columns], fold_train[target])
+            model = build_model(params)
+            model.fit(fold_train[feature_columns], fold_train[target])
 
-                fold_scored = score_validation(model, fold_valid, feature_columns)
-                result = performance_report(
-                    fold_scored,
-                    target=target,
-                    prediction="prediction",
-                    prediction_score="prediction_score",
-                    score_labels=list(model.classes_),
-                    include_lift=True,
-                    feature_columns=feature_columns,
-                    report_name=f"Trial {trial.number} Fold {fold_index} Performance",
-                    experiment_name=EXPERIMENT_NAME,
-                )
-                fold_scores.append(result.metrics["performance/f1"])
+            fold_scored = score_validation(model, fold_valid, feature_columns)
+            result = performance_report(
+                fold_scored,
+                target=target,
+                prediction="prediction",
+                prediction_score="prediction_score",
+                score_labels=list(model.classes_),
+                metrics=["f1", "roc_auc", "pr_auc"],
+                profile="metrics_only",
+                mlflow_step=fold_index,
+                feature_columns=feature_columns,
+                report_name="Fold Validation",
+                experiment_name=EXPERIMENT_NAME,
+            )
+            fold_scores.append(result.metrics["performance/f1"])
 
         mean_f1 = float(np.mean(fold_scores))
         mlflow.log_metric("mean_fold_f1", mean_f1)
@@ -126,7 +129,7 @@ def objective_with_folds(trial):
         return mean_f1
 ```
 
-Fold-level reports add MLflow runs and artifacts, so they are best for smaller studies, late-stage searches, or debugging unstable trials. For broad sweeps, log only trial-level performance.
+`profile="metrics_only"` defaults to scalar metrics only: no plots, no lift metrics, and no per-result JSON artifact. `mlflow_step=fold_index` keeps metric names stable while MLflow records the fold on the metric history. Explicit options still override the profile—for example, pass `plots=[...]`, `include_lift=True`, or `log_dict=True` when a particular fold needs richer diagnostics. Create nested fold runs only when separate child runs or fold-specific artifacts are intentionally required. Final training should use the standard profile so the selected model retains the richer diagnostic report.
 
 ## Final Training Report
 
