@@ -13,11 +13,16 @@ def _decile_table(events: np.ndarray, probabilities: np.ndarray) -> list[dict[st
     order = np.argsort(-probabilities, kind="mergesort")
     sorted_events = events[order]
     baseline = float(events.mean())
+    total_events = int(events.sum())
+    total_rows = len(sorted_events)
+    cumulative_rows = 0
+    cumulative_events = 0
     rows: list[dict[str, Any]] = []
 
-    for decile, indices in enumerate(np.array_split(np.arange(len(sorted_events)), 10), start=1):
+    for decile, indices in enumerate(np.array_split(np.arange(total_rows), 10), start=1):
         decile_events = sorted_events[indices]
-        if len(decile_events) == 0:
+        row_count = int(len(decile_events))
+        if row_count == 0:
             event_count = 0
             event_rate = None
             lift = None
@@ -25,14 +30,25 @@ def _decile_table(events: np.ndarray, probabilities: np.ndarray) -> list[dict[st
             event_count = int(decile_events.sum())
             event_rate = float(decile_events.mean())
             lift = float(event_rate / baseline) if baseline > 0 else float("nan")
+
+        cumulative_rows += row_count
+        cumulative_events += event_count
+        population_fraction = float(cumulative_rows / total_rows) if total_rows else 0.0
+        cumulative_capture_rate = (
+            float(cumulative_events / total_events) if total_events > 0 else float("nan")
+        )
         rows.append(
             {
                 "decile": decile,
-                "rows": int(len(decile_events)),
+                "rows": row_count,
                 "event_count": event_count,
                 "event_rate": event_rate,
                 "baseline_event_rate": baseline,
                 "lift": lift,
+                "cumulative_rows": cumulative_rows,
+                "cumulative_event_count": cumulative_events,
+                "population_fraction": population_fraction,
+                "cumulative_capture_rate": cumulative_capture_rate,
             }
         )
 
