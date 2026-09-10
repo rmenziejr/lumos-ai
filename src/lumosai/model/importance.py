@@ -17,12 +17,13 @@ from lumosai.artifacts import (
 from lumosai.data.ingest import to_pandas
 from lumosai.data.validation import require_columns
 from lumosai.exceptions import LumosOptionalDependencyError, LumosValidationError
-from lumosai.mlflow import log_result
+from lumosai.mlflow import ExtraResultLogger, log_result
 from lumosai.model.plots import importance_html
 from lumosai.results import LumosResult
 from lumosai.settings import settings
 
 ImportanceMethod = Literal["permutation", "shap", "both"]
+_SHAP_EXPLAINER_NAME = "shap-explainer"
 
 
 def _require_shap() -> Any:
@@ -42,7 +43,7 @@ def _shap_feature_importance(
     model: Any,
     frame_used: Any,
     feature_columns: list[str],
-) -> list[dict[str, Any]]:
+) -> tuple[list[dict[str, Any]], Any]:
     shap = _require_shap()
     features = frame_used[feature_columns]
     explainer = shap.Explainer(model, features)
@@ -73,7 +74,7 @@ def _shap_feature_importance(
         for feature, mean in zip(feature_columns, mean_values, strict=True)
     ]
     rows.sort(key=lambda row: float(row["importance_mean"]), reverse=True)
-    return rows
+    return rows, explainer
 
 
 def _permutation_feature_importance(
@@ -111,6 +112,30 @@ def _permutation_feature_importance(
     return rows
 
 
+def _shap_explainer_logger(
+    explainer: Any,
+    *,
+    serialize_model_using_mlflow: bool,
+) -> ExtraResultLogger:
+    def log_explainer(mlflow: Any, run_id: str | None, result: LumosResult) -> None:
+        model_info = mlflow.shap.log_explainer(
+            explainer,
+            name=_SHAP_EXPLAINER_NAME,
+            serialize_model_using_mlflow=serialize_model_using_mlflow,
+        )
+        model_uri = getattr(model_info, "model_uri", None)
+        if model_uri is None and run_id is not None:
+            model_uri = f"runs:/{run_id}/{_SHAP_EXPLAINER_NAME}"
+        result.artifacts["shap_explainer"] = {
+            "name": _SHAP_EXPLAINER_NAME,
+            "model_uri": model_uri,
+        }
+        result.metadata["shap_explainer_logged"] = True
+        result.metadata["shap_serialize_model"] = serialize_model_using_mlflow
+
+    return log_explainer
+
+
 def feature_importance(
     model: Any,
     data: Any,
@@ -125,11 +150,14 @@ def feature_importance(
     report_name: str | None = None,
     include_plots: bool | None = None,
     experiment_name: str | None = None,
+    log_shap_explainer: bool | None = None,
+    shap_serialize_model: bool = True,
 ) -> LumosResult:
     """Compute permutation or SHAP feature importance for a fitted model.
 
     MLflow logging is enabled when `experiment_name` is provided or
-    `settings.mlflow.default_experiment_name` is set.
+    `settings.mlflow.default_experiment_name` is set. SHAP explainers can be
+    persisted as MLflow models with ``log_shap_explainer``.
     """
 
     frame = to_pandas(data)
@@ -150,12 +178,16 @@ def feature_importance(
     resolved_include_plots = (
         settings.model.include_feature_importance_plots if include_plots is None else include_plots
     )
+    resolved_log_shap_explainer = (
+        settings.model.log_shap if log_shap_explainer is None else log_shap_explainer
+    )
 
     frame_used = frame
     if sample_size is not None and sample_size < len(frame):
         frame_used = frame.sample(n=sample_size, random_state=random_state)
 
     methods: dict[str, dict[str, Any]] = {}
+    shap_explainer: Any | None = None
     if resolved_method in {"permutation", "both"}:
         methods["permutation"] = {
             "features": _permutation_feature_importance(
@@ -169,20 +201,28 @@ def feature_importance(
             )
         }
     if resolved_method in {"shap", "both"}:
-        methods["shap"] = {
-            "features": _shap_feature_importance(model, frame_used, feature_columns)
-        }
+        shap_features, shap_explainer = _shap_feature_importance(
+            model, frame_used, feature_columns
+        )
+        methods["shap"] = {"features": shap_features}
 
     metrics: dict[str, float] = {}
     for method_name, method_summary in methods.items():
         for row in method_summary["features"]:
             metrics[f"importance/{method_name}/{row['feature']}"] = row["importance_mean"]
 
+    should_log_shap_explainer = bool(
+        resolved_log_shap_explainer and shap_explainer is not None
+    )
     metadata: dict[str, Any] = {
         "report_type": "feature_importance",
         "method": resolved_method,
         "feature_columns": list(feature_columns),
+        "shap_explainer_logged": False,
     }
+    if shap_explainer is not None:
+        metadata["log_shap_explainer"] = bool(resolved_log_shap_explainer)
+        metadata["shap_serialize_model"] = shap_serialize_model
     if report_name is not None:
         metadata["report_name"] = report_name
     summary = {
@@ -190,6 +230,15 @@ def feature_importance(
         "methods": methods,
     }
     artifacts: dict[str, Any] = {}
+    extra_logger = (
+        _shap_explainer_logger(
+            shap_explainer,
+            serialize_model_using_mlflow=shap_serialize_model,
+        )
+        if should_log_shap_explainer
+        else None
+    )
+
     html_path: Path | None = None
     if resolved_include_plots:
         title = report_name or "Feature Importance Report"
@@ -220,6 +269,7 @@ def feature_importance(
                 html_path=html_path,
                 artifact_path="feature_importance",
                 experiment_name=experiment_name,
+                extra_logger=extra_logger,
             )
 
     result = LumosResult(
@@ -228,5 +278,9 @@ def feature_importance(
         artifacts=artifacts,
         metadata=metadata,
     )
-    log_result(result, experiment_name=experiment_name)
+    log_result(
+        result,
+        experiment_name=experiment_name,
+        extra_logger=extra_logger,
+    )
     return result

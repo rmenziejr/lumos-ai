@@ -2,7 +2,7 @@ from __future__ import annotations
 
 import re
 import shutil
-from collections.abc import Iterator
+from collections.abc import Callable, Iterator
 from contextlib import contextmanager
 from pathlib import Path
 from tempfile import TemporaryDirectory
@@ -99,6 +99,7 @@ def log_result_with_html_artifact(
     loaded_settings: Settings = settings,
     log_dict: bool | None = None,
     mlflow_step: int | None = None,
+    extra_logger: Callable[[Any, str | None, Any], None] | None = None,
 ) -> Any:
     """Log a Lumos result and optional HTML artifact in one MLflow run."""
     from lumosai.mlflow import mlflow_run, resolve_experiment_name
@@ -125,6 +126,8 @@ def log_result_with_html_artifact(
                 mlflow.log_metrics(result.metrics, step=mlflow_step)
         if html_path is not None and loaded_settings.mlflow.log_artifacts:
             mlflow.log_artifact(str(html_path), artifact_path=artifact_path)
+        if extra_logger is not None:
+            extra_logger(mlflow, run_id, result)
         if should_log_dict:
             mlflow.log_dict(result.to_dict(), "lumosai_result.json")
     return result
