@@ -20,6 +20,7 @@ nav:
       - Monitoring Bundle: recipes/monitoring-bundle.md
       - Representative Samples: recipes/representative-samples.md
       - Performance Drift: recipes/performance-drift.md
+      - Classification Diagnostics: recipes/classification-diagnostics.md
       - Bias Analysis: recipes/bias-analysis.md
       - Feature Importance: recipes/feature-importance.md
       - Pipeline Patterns: recipes/pipeline-patterns.md
