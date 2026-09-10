@@ -355,6 +355,28 @@ Computes classification or regression metrics.
 - `score_labels` defines probability order for binary or multiclass scores. For 1D binary scores, the score is interpreted as the probability of `score_labels[-1]`.
 - Supports regression metrics such as MAE, RMSE, and R2.
 
+### `PerformancePlot`
+
+`PerformancePlot` is a string enum used by `performance_report(..., plots=[...])` so plot selection is type-checkable and IDE-friendly.
+
+```python
+from lumosai.model import PerformancePlot
+```
+
+Available values:
+
+- `PerformancePlot.CONFUSION_MATRIX` = `"confusion_matrix"`
+- `PerformancePlot.ROC` = `"roc"`
+- `PerformancePlot.PRECISION_RECALL` = `"precision_recall"`
+- `PerformancePlot.LIFT` = `"lift"`
+- `PerformancePlot.CAPTURE` = `"capture"`
+- `PerformancePlot.THRESHOLD_PERFORMANCE` = `"threshold_performance"`
+- `PerformancePlot.DECISION_CURVE` = `"decision_curve"`
+- `PerformancePlot.PREDICTED_VS_ACTUAL` = `"predicted_vs_actual"`
+- `PerformancePlot.RESIDUALS_VS_PREDICTION` = `"residuals_vs_prediction"`
+- `PerformancePlot.RESIDUAL_DISTRIBUTION` = `"residual_distribution"`
+- `PerformancePlot.RESIDUAL_QQ` = `"residual_qq"`
+
 ### `performance_report(...)`
 
 ```python
@@ -374,6 +396,8 @@ performance_report(
     include_plots=True,
     include_train_plots=False,
     experiment_name=None,
+    positive_label=1,
+    plots: list[PerformancePlot] | None = None,
 )
 ```
 
@@ -383,16 +407,61 @@ Computes current-window model performance. When a scored train frame is provided
 - `prediction` is the predicted label or value column.
 - `prediction_score` is an optional score/probability column, a column of probability arrays, or a mapping of labels to probability columns.
 - `score_labels` defines probability order for binary or multiclass arrays. Pass `list(model.classes_)` for sklearn-style classifiers.
+- `positive_label` selects the event class for binary precision, recall, F1, ROC/PR score interpretation, lift/capture, threshold-performance, and decision-curve diagnostics. It defaults to `1` and must be present in the resolved binary labels.
 - `train` is an optional scored training frame with the same `target`, `prediction`, and optional `prediction_score` fields. When provided, metrics are emitted under `performance/train/...` and `performance/holdout/...` instead of the legacy unsplit `performance/...` keys.
 - `performance/gap/<metric>` compares train to holdout. For higher-is-better metrics such as ROC AUC and PR AUC, gap is `train - holdout`. For lower-is-better metrics such as log loss, MAE, and RMSE, gap is `holdout - train`.
 - `performance/ratio/<metric>` is `holdout / train`, which is useful for MLflow dashboards alongside the gap values.
 - `include_train_plots` records whether train plots were requested. Train metrics are available when `train` is provided; report HTML remains holdout-focused in this version.
+- `plots=None` preserves the default behavior and renders all plots applicable to the resolved task and available inputs.
+- `plots=[...]` renders exactly the selected applicable plots. Use `PerformancePlot` values for static type checking and IDE completion.
+- An explicit `plots` selection takes precedence over `include_plots`. `include_plots=False` remains supported for backward compatibility when `plots` is omitted.
+- Plot selections that do not apply to the resolved task raise `LumosValidationError` instead of being silently ignored.
 - When multiclass array scores omit `score_labels`, labels are inferred by sorting observed target/prediction labels and warning metadata is recorded.
 - Classification reports include ROC AUC and PR AUC when scores are supplied, plus log loss when probability-like scores are supplied.
 - Pass `include_lift=True` to add decile lift metrics under `performance/lift/<class>/...`.
-- Exports `result.artifacts["html"]` by default with common diagnostics: confusion matrix, ROC, PR, and lift plots for scored classification reports; predicted-vs-actual and residual plots for regression reports.
+- Binary scored classification reports can render confusion matrix, ROC, precision-recall, lift, observed event rate with cumulative capture, threshold performance, and decision curve analysis.
+- `capture` sorts observations by predicted probability into score deciles. Bars show observed event rate by decile and the cumulative line shows the share of all positive events captured through each decile.
+- `threshold_performance` plots precision, recall/sensitivity, specificity, and F1 across probability thresholds.
+- `decision_curve` plots model net benefit against Treat All and Treat None strategies across probability thresholds. It is binary-only and uses `positive_label` as the event of interest.
+- Regression reports can render predicted-vs-actual, residuals-vs-prediction, residual distribution, and a residual Q-Q plot.
 - Returns namespaced metrics under `performance/...`.
 - Stores `feature_columns` and `categorical_columns` in metadata when provided.
+
+Selective classification example:
+
+```python
+from lumosai.model import PerformancePlot, performance_report
+
+result = performance_report(
+    scored_frame,
+    target="actual",
+    prediction="prediction",
+    prediction_score="risk_probability",
+    positive_label=1,
+    plots=[
+        PerformancePlot.CAPTURE,
+        PerformancePlot.THRESHOLD_PERFORMANCE,
+        PerformancePlot.DECISION_CURVE,
+    ],
+)
+```
+
+Selective regression example:
+
+```python
+result = performance_report(
+    scored_frame,
+    target="actual",
+    prediction="prediction",
+    task_type="regression",
+    plots=[
+        PerformancePlot.PREDICTED_VS_ACTUAL,
+        PerformancePlot.RESIDUALS_VS_PREDICTION,
+        PerformancePlot.RESIDUAL_DISTRIBUTION,
+        PerformancePlot.RESIDUAL_QQ,
+    ],
+)
+```
 
 ### `performance_drift_report(...)`
 
