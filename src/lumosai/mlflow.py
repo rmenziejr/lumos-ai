@@ -1,7 +1,7 @@
 from __future__ import annotations
 
 import os
-from collections.abc import Iterator
+from collections.abc import Callable, Iterator
 from contextlib import contextmanager, nullcontext
 from importlib import import_module
 from pathlib import Path
@@ -12,6 +12,8 @@ import pandas as pd
 from lumosai.exceptions import LumosConfigurationError, LumosOptionalDependencyError
 from lumosai.results import LumosResult, LumosRun
 from lumosai.settings import Settings, settings
+
+ExtraResultLogger = Callable[[Any, str | None, LumosResult], None]
 
 
 def resolve_experiment_name(
@@ -73,6 +75,7 @@ def log_result(
     loaded_settings: Settings = settings,
     log_dict: bool | None = None,
     mlflow_step: int | None = None,
+    extra_logger: ExtraResultLogger | None = None,
 ) -> LumosResult:
     if mlflow_step is not None:
         result.metadata["mlflow_step"] = mlflow_step
@@ -95,6 +98,8 @@ def log_result(
                 mlflow.log_metrics(result.metrics)
             else:
                 mlflow.log_metrics(result.metrics, step=mlflow_step)
+        if extra_logger is not None:
+            extra_logger(mlflow, run_id, result)
         if should_log_dict:
             mlflow.log_dict(result.to_dict(), "lumosai_result.json")
     return result
