@@ -1,9 +1,9 @@
-# Classification Diagnostics
+# Classification and Performance Diagnostics
 
-Scored binary classification reports include diagnostics that help translate ranking performance into operational decisions.
+`performance_report()` renders all plots applicable to the task by default. Use the typed `PerformancePlot` enum to request only the diagnostics needed for a report.
 
 ```python
-from lumosai.model import performance_report
+from lumosai.model import PerformancePlot, performance_report
 
 result = performance_report(
     scored_frame,
@@ -12,40 +12,60 @@ result = performance_report(
     prediction_score="risk_probability",
     task_type="classification",
     positive_label=1,
+    plots=[
+        PerformancePlot.CAPTURE,
+        PerformancePlot.THRESHOLD_PERFORMANCE,
+        PerformancePlot.DECISION_CURVE,
+    ],
 )
 ```
 
-When probability scores and plots are available, the HTML report includes the standard confusion matrix, ROC curve, precision-recall curve, and lift chart, plus three utility-oriented diagnostics for binary classification.
+An explicit `plots=[...]` selection takes precedence over the legacy `include_plots` flag. Omitting `plots` preserves the existing behavior: `include_plots=True` renders all applicable plots and `include_plots=False` renders none.
 
-## Observed Event Rate and Cumulative Capture
+## Classification plot options
 
-Rows are sorted from highest to lowest predicted probability and divided into score deciles.
+- `CONFUSION_MATRIX`
+- `ROC`
+- `PRECISION_RECALL`
+- `LIFT`
+- `CAPTURE`
+- `THRESHOLD_PERFORMANCE`
+- `DECISION_CURVE`
 
-- Bars show the observed positive-event rate in each decile.
-- The cumulative-capture line shows the fraction of all observed positive events captured by targeting through that decile.
-- Decile 1 is the highest-risk group.
+### Observed Event Rate and Cumulative Capture
 
-The lift summary also exposes `cumulative_rows`, `cumulative_event_count`, `population_fraction`, and `cumulative_capture_rate` for each decile.
+Rows are sorted from highest to lowest predicted probability and divided into score deciles. Bars show observed positive-event rate in each decile, while the line shows the cumulative fraction of all positive events captured through that decile. The structured lift summary also exposes `cumulative_rows`, `cumulative_event_count`, `population_fraction`, and `cumulative_capture_rate`.
 
-## Threshold Performance
+### Threshold Performance
 
-The threshold-performance plot shows precision, recall/sensitivity, specificity, and F1 across probability thresholds. Use it to understand the operating trade-off created by selecting a particular intervention threshold rather than relying on a single default cutoff.
+Shows precision, recall/sensitivity, specificity, and F1 across probability thresholds.
 
-## Decision Curve Analysis
+### Decision Curve Analysis
 
-Decision curve analysis compares the model's net benefit across probability thresholds with two reference strategies:
+Compares model net benefit with **Treat All** and **Treat None** strategies across probability thresholds. Binary `positive_label` determines the event of interest.
 
-- **Treat All**: intervene on every observation.
-- **Treat None**: intervene on no observations.
+## Regression plot options
 
-For threshold probability `pt`, model net benefit is calculated as:
+- `PREDICTED_VS_ACTUAL`
+- `RESIDUALS_VS_PREDICTION`
+- `RESIDUAL_DISTRIBUTION`
+- `RESIDUAL_QQ`
 
-```text
-TP / N - FP / N * pt / (1 - pt)
+The residual Q-Q plot compares ordered residuals with theoretical normal quantiles. It is useful for identifying skew, heavy tails, and outliers that are less obvious in the residual histogram.
+
+```python
+result = performance_report(
+    scored_frame,
+    target="actual",
+    prediction="prediction",
+    task_type="regression",
+    plots=[
+        PerformancePlot.PREDICTED_VS_ACTUAL,
+        PerformancePlot.RESIDUALS_VS_PREDICTION,
+        PerformancePlot.RESIDUAL_DISTRIBUTION,
+        PerformancePlot.RESIDUAL_QQ,
+    ],
+)
 ```
 
-The decision curve is generated only for binary classification with probability scores. `positive_label` determines which outcome is treated as the event of interest.
-
-## Multiclass Behavior
-
-Multiclass reports continue to use the existing one-vs-rest ROC, precision-recall, and lift behavior. Threshold-performance and decision-curve diagnostics are intentionally binary-only in this version.
+Classification-only plot values are rejected for regression reports and regression-only values are rejected for classification reports.
