@@ -128,13 +128,6 @@ def performance_report(
         resolved_include_plots = profile != "metrics_only"
     else:
         resolved_include_plots = include_plots
-    selected_plots = _resolve_plots(
-        plots=plots,
-        include_plots=resolved_include_plots,
-        task_type=task_type or detect_task_type(
-            to_pandas(current)[target], to_pandas(current)[prediction]
-        ),
-    )
     resolved_log_dict = False if profile == "metrics_only" and log_dict is None else log_dict
 
     current_pd = to_pandas(current)
@@ -152,7 +145,6 @@ def performance_report(
         analysis_columns=feature_columns,
     )
     resolved_task = task_type or detect_task_type(current_pd[target], current_pd[prediction])
-    # Resolve again from the final task value so explicit task_type and validation stay aligned.
     selected_plots = _resolve_plots(
         plots=plots,
         include_plots=resolved_include_plots,
