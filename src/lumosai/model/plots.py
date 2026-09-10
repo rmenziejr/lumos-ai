@@ -268,6 +268,139 @@ def _lift_plot(lift_summary: dict[str, Any] | None) -> str | None:
     return _figure_html(fig, "Lift by Decile")
 
 
+def _capture_plot(lift_summary: dict[str, Any] | None) -> str | None:
+    if not lift_summary:
+        return None
+    rows = lift_summary.get("classes", {}).get("positive")
+    if not rows:
+        return None
+    populated = [row for row in rows if row.get("rows", 0) > 0]
+    if not populated:
+        return None
+
+    deciles = [int(row["decile"]) for row in populated]
+    event_rates = [float(row["event_rate"]) for row in populated]
+    capture_rates = [float(row["cumulative_capture_rate"]) for row in populated]
+
+    fig, rate_ax = plt.subplots(figsize=(7, 4.5))
+    rate_ax.bar(deciles, event_rates, alpha=0.65, label="Observed event rate")
+    rate_ax.set(
+        xlabel="Score Decile (1 = Highest Risk)",
+        ylabel="Observed Event Rate",
+        title="Observed Event Rate and Cumulative Capture",
+        ylim=(0, 1),
+    )
+    rate_ax.set_xticks(deciles)
+
+    capture_ax = rate_ax.twinx()
+    capture_ax.plot(deciles, capture_rates, marker="o", linewidth=2, label="Cumulative capture")
+    capture_ax.set(ylabel="Cumulative Capture Rate", ylim=(0, 1))
+
+    rate_handles, rate_labels = rate_ax.get_legend_handles_labels()
+    capture_handles, capture_labels = capture_ax.get_legend_handles_labels()
+    rate_ax.legend(rate_handles + capture_handles, rate_labels + capture_labels, loc="best")
+    fig.tight_layout()
+    return _figure_html(fig, "Observed Event Rate and Cumulative Capture")
+
+
+def _binary_events_and_probabilities(
+    y_true: pd.Series,
+    scores: ClassificationScores,
+) -> tuple[np.ndarray, np.ndarray] | None:
+    if scores.positive_label is None or len(scores.labels) != 2:
+        return None
+    events = (y_true == scores.positive_label).to_numpy(dtype=int)
+    if len(np.unique(events)) < 2:
+        return None
+    class_index = scores.label_index(scores.positive_label)
+    return events, scores.values[:, class_index]
+
+
+def _threshold_performance_plot(
+    y_true: pd.Series,
+    scores: ClassificationScores,
+) -> str | None:
+    data = _binary_events_and_probabilities(y_true, scores)
+    if data is None:
+        return None
+    events, probabilities = data
+    thresholds = np.linspace(0.01, 0.99, 99)
+    precision_values: list[float] = []
+    recall_values: list[float] = []
+    specificity_values: list[float] = []
+    f1_values: list[float] = []
+
+    for threshold in thresholds:
+        predicted = probabilities >= threshold
+        tp = int(np.sum((predicted == 1) & (events == 1)))
+        fp = int(np.sum((predicted == 1) & (events == 0)))
+        tn = int(np.sum((predicted == 0) & (events == 0)))
+        fn = int(np.sum((predicted == 0) & (events == 1)))
+        precision = tp / (tp + fp) if tp + fp else 0.0
+        recall = tp / (tp + fn) if tp + fn else 0.0
+        specificity = tn / (tn + fp) if tn + fp else 0.0
+        f1 = 2 * precision * recall / (precision + recall) if precision + recall else 0.0
+        precision_values.append(float(precision))
+        recall_values.append(float(recall))
+        specificity_values.append(float(specificity))
+        f1_values.append(float(f1))
+
+    fig, ax = plt.subplots(figsize=(7, 4.5))
+    ax.plot(thresholds, precision_values, label="Precision")
+    ax.plot(thresholds, recall_values, label="Recall / Sensitivity")
+    ax.plot(thresholds, specificity_values, label="Specificity")
+    ax.plot(thresholds, f1_values, label="F1")
+    ax.set(
+        xlim=(0, 1),
+        ylim=(0, 1),
+        xlabel="Probability Threshold",
+        ylabel="Metric Value",
+        title="Threshold Performance",
+    )
+    ax.legend(loc="best")
+    fig.tight_layout()
+    return _figure_html(fig, "Threshold Performance")
+
+
+def _decision_curve_plot(
+    y_true: pd.Series,
+    scores: ClassificationScores,
+) -> str | None:
+    data = _binary_events_and_probabilities(y_true, scores)
+    if data is None:
+        return None
+    events, probabilities = data
+    thresholds = np.linspace(0.01, 0.99, 99)
+    n = len(events)
+    prevalence = float(events.mean())
+    model_net_benefit: list[float] = []
+    treat_all_net_benefit: list[float] = []
+
+    for threshold in thresholds:
+        predicted = probabilities >= threshold
+        tp = int(np.sum((predicted == 1) & (events == 1)))
+        fp = int(np.sum((predicted == 1) & (events == 0)))
+        odds = threshold / (1.0 - threshold)
+        model_net_benefit.append(float(tp / n - fp / n * odds))
+        treat_all_net_benefit.append(float(prevalence - (1.0 - prevalence) * odds))
+
+    fig, ax = plt.subplots(figsize=(7, 4.5))
+    ax.plot(thresholds, model_net_benefit, label="Model")
+    ax.plot(thresholds, treat_all_net_benefit, linestyle="--", label="Treat All")
+    ax.axhline(0.0, linestyle=":", label="Treat None")
+    upper = max(prevalence, max(model_net_benefit), max(treat_all_net_benefit))
+    ax.set(
+        xlim=(0, 1),
+        ylim=(-0.05, upper + 0.05),
+        xlabel="Probability Threshold",
+        ylabel="Net Benefit",
+        title="Decision Curve Analysis",
+    )
+    ax.legend(loc="best")
+    fig.tight_layout()
+    return _figure_html(fig, "Decision Curve Analysis")
+
+
 def performance_html(
     *,
     title: str,
@@ -286,9 +419,34 @@ def performance_html(
         )
         if scores is not None:
             sections.extend(_classification_curve_plots(frame[target], scores))
+            if scores.positive_label is not None:
+                capture_content = _capture_plot(lift_summary)
+                if capture_content is not None:
+                    sections.append(
+                        (
+                            "Observed Event Rate and Cumulative Capture",
+                            "<p>Bars show observed positive-event rate within each score decile; "
+                            "the line shows the cumulative share of all positive events captured.</p>"
+                            + capture_content,
+                        )
+                    )
             lift_content = _lift_plot(lift_summary)
             if lift_content is not None:
                 sections.append(("Lift by Decile", lift_content))
+            if scores.positive_label is not None:
+                threshold_content = _threshold_performance_plot(frame[target], scores)
+                if threshold_content is not None:
+                    sections.append(("Threshold Performance", threshold_content))
+                decision_content = _decision_curve_plot(frame[target], scores)
+                if decision_content is not None:
+                    sections.append(
+                        (
+                            "Decision Curve Analysis",
+                            "<p>Net benefit across probability thresholds compared with Treat All "
+                            "and Treat None strategies.</p>"
+                            + decision_content,
+                        )
+                    )
     else:
         sections.extend(_regression_plots(frame[target], frame[prediction]))
     return _html_document(title, sections)
