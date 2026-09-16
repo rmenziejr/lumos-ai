@@ -6,6 +6,7 @@ from typing import Any, Literal
 
 import numpy as np
 from sklearn.inspection import permutation_importance  # type: ignore[import-untyped]
+from sklearn.pipeline import Pipeline
 
 from lumosai.artifacts import (
     artifact_workspace,
@@ -39,6 +40,23 @@ def _require_shap() -> Any:
     return shap
 
 
+def _resolve_shap_model(model: Any) -> Any:
+    """Return a SHAP-compatible model while preserving pipeline semantics."""
+    if not isinstance(model, Pipeline):
+        return model
+
+    if len(model.steps) == 1:
+        return model.steps[-1][1]
+
+    if hasattr(model, "predict_proba"):
+        return model.predict_proba
+    if hasattr(model, "predict"):
+        return model.predict
+
+    msg = "sklearn Pipeline must provide predict_proba or predict for SHAP importance"
+    raise LumosValidationError(msg)
+
+
 def _shap_feature_importance(
     model: Any,
     frame_used: Any,
@@ -46,7 +64,8 @@ def _shap_feature_importance(
 ) -> tuple[list[dict[str, Any]], Any]:
     shap = _require_shap()
     features = frame_used[feature_columns]
-    explainer = shap.Explainer(model, features)
+    shap_model = _resolve_shap_model(model)
+    explainer = shap.Explainer(shap_model, features)
     values = explainer(features)
     raw_values = np.asarray(values.values)
     feature_count = len(feature_columns)
