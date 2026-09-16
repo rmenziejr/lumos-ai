@@ -9,6 +9,8 @@ import numpy as np
 import pandas as pd
 import pytest
 from sklearn.ensemble import RandomForestClassifier
+from sklearn.pipeline import Pipeline
+from sklearn.preprocessing import StandardScaler
 
 from lumosai.exceptions import LumosOptionalDependencyError, LumosValidationError
 from lumosai.model.importance import feature_importance
@@ -127,6 +129,71 @@ def test_feature_importance_defaults_to_both_methods_and_html_artifact(
     assert "Both Importance" in html
     assert "Permutation Importance" in html
     assert "SHAP Importance" in html
+
+
+def test_shap_importance_unwraps_single_step_pipeline(monkeypatch: pytest.MonkeyPatch) -> None:
+    class FakeExplainer:
+        received_model = None
+
+        def __init__(self, model, features):
+            type(self).received_model = model
+
+        def __call__(self, features):
+            return SimpleNamespace(values=np.ones((len(features), features.shape[1])))
+
+    monkeypatch.setitem(sys.modules, "shap", SimpleNamespace(Explainer=FakeExplainer))
+    frame = make_frame()
+    estimator = RandomForestClassifier(n_estimators=5, random_state=42)
+    model = Pipeline([("clf", estimator)]).fit(
+        frame[["signal", "noise"]], frame["target"]
+    )
+
+    feature_importance(
+        model,
+        frame,
+        target="target",
+        feature_columns=["signal", "noise"],
+        method="shap",
+        include_plots=False,
+    )
+
+    assert FakeExplainer.received_model is estimator
+
+
+def test_shap_importance_preserves_multistep_pipeline_prediction_path(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    class FakeExplainer:
+        received_model = None
+
+        def __init__(self, model, features):
+            type(self).received_model = model
+
+        def __call__(self, features):
+            return SimpleNamespace(values=np.ones((len(features), features.shape[1], 2)))
+
+    monkeypatch.setitem(sys.modules, "shap", SimpleNamespace(Explainer=FakeExplainer))
+    frame = make_frame()
+    model = Pipeline(
+        [
+            ("scale", StandardScaler()),
+            ("clf", RandomForestClassifier(n_estimators=5, random_state=42)),
+        ]
+    ).fit(frame[["signal", "noise"]], frame["target"])
+
+    feature_importance(
+        model,
+        frame,
+        target="target",
+        feature_columns=["signal", "noise"],
+        method="shap",
+        include_plots=False,
+    )
+
+    received = FakeExplainer.received_model
+    assert callable(received)
+    assert getattr(received, "__self__", None) is model
+    assert getattr(received, "__name__", None) == "predict_proba"
 
 
 def test_feature_importance_validates_columns() -> None:
