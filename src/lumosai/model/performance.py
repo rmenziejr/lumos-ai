@@ -5,6 +5,7 @@ from enum import StrEnum
 from pathlib import Path
 from typing import Any, Literal, cast
 
+import numpy as np
 import pandas as pd
 
 from lumosai.artifacts import (
@@ -106,6 +107,7 @@ def performance_report(
     include_train_plots: bool = False,
     experiment_name: str | None = None,
     positive_label: Any = 1,
+    classification_threshold: float | None = None,
     plots: list[PerformancePlot] | None = None,
     metrics: MetricPreset | list[PerformanceMetric] = "default",
     profile: Literal["standard", "metrics_only"] = "standard",
@@ -162,9 +164,16 @@ def performance_report(
         else None
     )
     _set_binary_positive_label(scores, positive_label)
+    metric_prediction = _thresholded_binary_prediction(
+        current_pd,
+        prediction=prediction,
+        scores=scores,
+        positive_label=positive_label,
+        threshold=classification_threshold,
+    )
     raw_metrics = get_metrics(
         current_pd[target],
-        current_pd[prediction],
+        metric_prediction,
         y_score=cast(Sequence[Any], scores.values) if scores is not None else None,
         score_labels=scores.labels if scores is not None else None,
         task_type=resolved_task,
@@ -214,9 +223,16 @@ def performance_report(
             else None
         )
         _set_binary_positive_label(train_scores, positive_label)
+        train_metric_prediction = _thresholded_binary_prediction(
+            train_pd,
+            prediction=prediction,
+            scores=train_scores,
+            positive_label=positive_label,
+            threshold=classification_threshold,
+        )
         train_raw_metrics = get_metrics(
             train_pd[target],
-            train_pd[prediction],
+            train_metric_prediction,
             y_score=cast(Sequence[Any], train_scores.values) if train_scores is not None else None,
             score_labels=train_scores.labels if train_scores is not None else None,
             task_type=resolved_task,
@@ -240,8 +256,9 @@ def performance_report(
         "profile": profile,
         "metrics_argument": requested_metrics_argument,
     }
-    if mlflow_step is not None:
-        metadata["mlflow_step"] = mlflow_step
+    if classification_threshold is not None:
+        metadata["classification_threshold"] = classification_threshold
+    if classification_threshold is not None:\n        metadata["classification_threshold"] = classification_threshold\n    if mlflow_step is not None:\n        metadata["mlflow_step"] = mlflow_step
     if scores is not None:
         metadata.update(scores.metadata())
     elif resolved_task == "classification" and _is_binary(
@@ -323,6 +340,28 @@ def performance_report(
         mlflow_step=mlflow_step,
     )
     return result
+
+
+def _thresholded_binary_prediction(
+    frame: pd.DataFrame,
+    *,
+    prediction: str,
+    scores: ClassificationScores | None,
+    positive_label: Any,
+    threshold: float | None,
+) -> pd.Series:
+    if threshold is None:
+        return frame[prediction]
+    if not 0.0 <= threshold <= 1.0:
+        raise LumosValidationError("classification_threshold must be between 0 and 1")
+    if scores is None or len(scores.labels) != 2:
+        raise LumosValidationError(
+            "classification_threshold requires binary classification prediction_score"
+        )
+    negative_label = next(label for label in scores.labels if label != positive_label)
+    positive_scores = scores.values[:, scores.label_index(positive_label)]
+    values = np.where(positive_scores >= threshold, positive_label, negative_label)
+    return pd.Series(values, index=frame.index, name=prediction)
 
 
 def _set_binary_positive_label(scores: ClassificationScores | None, positive_label: Any) -> None:
