@@ -418,3 +418,65 @@ def test_performance_report_requires_scores_for_lift() -> None:
             include_lift=True,
             task_type="classification",
         )
+
+
+def test_performance_report_applies_binary_classification_threshold() -> None:
+    frame = pd.DataFrame(
+        {
+            "actual": [0, 1, 1, 0],
+            "prediction": [0, 1, 1, 0],
+            "score": [0.10, 0.60, 0.80, 0.40],
+        }
+    )
+    result = performance_report(
+        frame,
+        target="actual",
+        prediction="prediction",
+        prediction_score="score",
+        task_type="classification",
+        classification_threshold=0.70,
+        include_plots=False,
+    )
+    assert result.metrics["performance/accuracy"] == pytest.approx(0.75)
+    assert result.metrics["performance/precision"] == pytest.approx(1.0)
+    assert result.metrics["performance/recall"] == pytest.approx(0.5)
+    assert result.metrics["performance/f1"] == pytest.approx(2 / 3)
+    assert result.metadata["classification_threshold"] == pytest.approx(0.70)
+
+
+@pytest.mark.parametrize("threshold", [-0.01, 1.01])
+def test_performance_report_rejects_invalid_classification_threshold(threshold: float) -> None:
+    frame = pd.DataFrame(
+        {"actual": [0, 1], "prediction": [0, 1], "score": [0.2, 0.8]}
+    )
+    with pytest.raises(LumosValidationError, match="between 0 and 1"):
+        performance_report(
+            frame,
+            target="actual",
+            prediction="prediction",
+            prediction_score="score",
+            task_type="classification",
+            classification_threshold=threshold,
+            include_plots=False,
+        )
+
+
+def test_performance_report_threshold_requires_binary_scores() -> None:
+    frame = pd.DataFrame(
+        {
+            "actual": [0, 1, 2],
+            "prediction": [0, 1, 2],
+            "score": [[0.8, 0.1, 0.1], [0.1, 0.8, 0.1], [0.1, 0.1, 0.8]],
+        }
+    )
+    with pytest.raises(LumosValidationError, match="requires binary classification"):
+        performance_report(
+            frame,
+            target="actual",
+            prediction="prediction",
+            prediction_score="score",
+            score_labels=[0, 1, 2],
+            task_type="classification",
+            classification_threshold=0.5,
+            include_plots=False,
+        )
