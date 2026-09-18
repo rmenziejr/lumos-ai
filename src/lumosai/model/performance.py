@@ -41,7 +41,7 @@ class PerformancePlot(StrEnum):
     LIFT = "lift"
     CAPTURE = "capture"
     THRESHOLD_PERFORMANCE = "threshold_performance"
-    DECISION_CURVE = "decision_curve"
+    DECISION_CURVE = "decision_curve"\n    OPERATIONAL_TABLE = "operational_table"
     PREDICTED_VS_ACTUAL = "predicted_vs_actual"
     RESIDUALS_VS_PREDICTION = "residuals_vs_prediction"
     RESIDUAL_DISTRIBUTION = "residual_distribution"
@@ -55,7 +55,7 @@ _CLASSIFICATION_PLOTS = {
     PerformancePlot.LIFT,
     PerformancePlot.CAPTURE,
     PerformancePlot.THRESHOLD_PERFORMANCE,
-    PerformancePlot.DECISION_CURVE,
+    PerformancePlot.DECISION_CURVE,\n    PerformancePlot.OPERATIONAL_TABLE,
 }
 _REGRESSION_PLOTS = {
     PerformancePlot.PREDICTED_VS_ACTUAL,
