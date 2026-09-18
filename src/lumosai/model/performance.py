@@ -260,7 +260,10 @@ def performance_report(
     }
     if classification_threshold is not None:
         metadata["classification_threshold"] = classification_threshold
-    if classification_threshold is not None:\n        metadata["classification_threshold"] = classification_threshold\n    if mlflow_step is not None:\n        metadata["mlflow_step"] = mlflow_step
+    if classification_threshold is not None:
+        metadata["classification_threshold"] = classification_threshold
+    if mlflow_step is not None:
+        metadata["mlflow_step"] = mlflow_step
     if scores is not None:
         metadata.update(scores.metadata())
     elif resolved_task == "classification" and _is_binary(
