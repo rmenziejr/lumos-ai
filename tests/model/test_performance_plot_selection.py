@@ -83,3 +83,68 @@ def test_regression_residual_qq_can_be_selected(
     assert "Residual Q-Q Plot" in html
     assert "Predicted vs Actual" not in html
     assert "Residuals vs Prediction" not in html
+
+
+def test_operational_table_reports_cutoff_flag_capture_and_event_rate(
+    monkeypatch: pytest.MonkeyPatch,
+    tmp_path: Path,
+) -> None:
+    monkeypatch.setattr(settings.artifacts, "local_dir", tmp_path)
+    frame = pd.DataFrame(
+        {
+            "actual": [0, 0, 0, 0, 1, 1, 1, 1, 1, 1],
+            "prediction": [0, 0, 0, 0, 0, 1, 1, 1, 1, 1],
+            "score": [0.05, 0.10, 0.15, 0.20, 0.30, 0.40, 0.50, 0.60, 0.80, 0.95],
+        }
+    )
+
+    result = performance_report(
+        frame,
+        target="actual",
+        prediction="prediction",
+        prediction_score="score",
+        task_type="classification",
+        plots=[PerformancePlot.OPERATIONAL_TABLE],
+    )
+
+    html = Path(result.artifacts["html"]).read_text(encoding="utf-8")
+    assert "Operational Threshold Table" in html
+    assert "Cutoff Score" in html
+    assert "Flag Rate" in html
+    assert "Capture Rate" in html
+    assert "Population Event Rate" in html
+    assert "60.0%" in html
+
+
+def test_operational_table_requires_binary_scores(
+    monkeypatch: pytest.MonkeyPatch,
+    tmp_path: Path,
+) -> None:
+    monkeypatch.setattr(settings.artifacts, "local_dir", tmp_path)
+    frame = pd.DataFrame(
+        {
+            "actual": [0, 1, 2, 0, 1, 2],
+            "prediction": [0, 1, 2, 0, 1, 2],
+            "score": [
+                [0.8, 0.1, 0.1],
+                [0.1, 0.8, 0.1],
+                [0.1, 0.1, 0.8],
+                [0.7, 0.2, 0.1],
+                [0.2, 0.7, 0.1],
+                [0.1, 0.2, 0.7],
+            ],
+        }
+    )
+
+    result = performance_report(
+        frame,
+        target="actual",
+        prediction="prediction",
+        prediction_score="score",
+        score_labels=[0, 1, 2],
+        task_type="classification",
+        plots=[PerformancePlot.OPERATIONAL_TABLE],
+    )
+
+    html = Path(result.artifacts["html"]).read_text(encoding="utf-8")
+    assert "Operational Threshold Table" not in html
