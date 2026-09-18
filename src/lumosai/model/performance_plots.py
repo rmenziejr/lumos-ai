@@ -21,6 +21,39 @@ from lumosai.model.plots import (
 from lumosai.model.scores import ClassificationScores
 
 
+def _operational_table(y_true: pd.Series, scores: ClassificationScores) -> str | None:
+    if len(scores.labels) != 2 or scores.positive_label is None:
+        return None
+    y = (y_true.to_numpy() == scores.positive_label)
+    probabilities = scores.values[:, scores.label_index(scores.positive_label)]
+    if len(y) == 0 or y.sum() == 0:
+        return None
+
+    population_event_rate = float(y.mean())
+    rows: list[str] = []
+    for flag_fraction in np.arange(0.1, 1.01, 0.1):
+        cutoff = float(np.quantile(probabilities, 1.0 - flag_fraction, method="lower"))
+        flagged = probabilities >= cutoff
+        flag_rate = float(flagged.mean())
+        capture_rate = float(y[flagged].sum() / y.sum())
+        rows.append(
+            "<tr>"
+            f"<td>{cutoff:.4f}</td>"
+            f"<td>{flag_rate:.1%}</td>"
+            f"<td>{capture_rate:.1%}</td>"
+            f"<td>{population_event_rate:.1%}</td>"
+            "</tr>"
+        )
+    return (
+        "<table><thead><tr>"
+        "<th>Cutoff Score</th><th>Flag Rate</th><th>Capture Rate</th>"
+        "<th>Population Event Rate</th>"
+        "</tr></thead><tbody>"
+        + "".join(rows)
+        + "</tbody></table>"
+    )
+
+
 def _regression_section(
     name: str,
     y_true: pd.Series,
@@ -106,6 +139,10 @@ def selective_performance_html(
                 content = _decision_curve_plot(frame[target], scores)
                 if content is not None:
                     sections.append(("Decision Curve Analysis", content))
+            if "operational_table" in plots:
+                content = _operational_table(frame[target], scores)
+                if content is not None:
+                    sections.append(("Operational Threshold Table", content))
     else:
         order = [
             "predicted_vs_actual",
