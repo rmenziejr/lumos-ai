@@ -57,6 +57,15 @@ def _resolve_shap_model(model: Any) -> Any:
     raise LumosValidationError(msg)
 
 
+def _is_catboost_model(model: Any) -> bool:
+    try:
+        from catboost import CatBoostClassifier, CatBoostRegressor  # type: ignore[import-not-found]
+    except ImportError:
+        return False
+
+    return isinstance(model, (CatBoostClassifier, CatBoostRegressor))
+
+
 def _shap_feature_importance(
     model: Any,
     frame_used: Any,
@@ -65,7 +74,13 @@ def _shap_feature_importance(
     shap = _require_shap()
     features = frame_used[feature_columns]
     shap_model = _resolve_shap_model(model)
-    explainer = shap.Explainer(shap_model, features)
+    if _is_catboost_model(shap_model):
+        explainer = shap.TreeExplainer(
+            shap_model,
+            feature_perturbation="tree_path_dependent",
+        )
+    else:
+        explainer = shap.Explainer(shap_model, features)
     values = explainer(features)
     raw_values = np.asarray(values.values)
     feature_count = len(feature_columns)
