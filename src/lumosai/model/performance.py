@@ -240,6 +240,8 @@ def performance_report(
         "profile": profile,
         "metrics_argument": requested_metrics_argument,
     }
+    if classification_threshold is not None:
+        metadata["classification_threshold"] = classification_threshold
     if mlflow_step is not None:
         metadata["mlflow_step"] = mlflow_step
     if scores is not None:
