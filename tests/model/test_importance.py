@@ -160,6 +160,61 @@ def test_shap_importance_unwraps_single_step_pipeline(monkeypatch: pytest.Monkey
     assert FakeExplainer.received_model is estimator
 
 
+def test_shap_importance_uses_tree_path_dependent_explainer_for_catboost(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    class FakeCatBoostClassifier:
+        pass
+
+    class FakeCatBoostRegressor:
+        pass
+
+    class FakeTreeExplainer:
+        def __init__(self, model, *, feature_perturbation):
+            assert isinstance(model, FakeCatBoostClassifier)
+            assert feature_perturbation == "tree_path_dependent"
+
+        def __call__(self, features):
+            return SimpleNamespace(values=np.ones((len(features), features.shape[1])))
+
+    class UnexpectedGenericExplainer:
+        def __init__(self, model, features):
+            pytest.fail("CatBoost must not use a background-data SHAP explainer")
+
+    monkeypatch.setitem(
+        sys.modules,
+        "catboost",
+        SimpleNamespace(
+            CatBoostClassifier=FakeCatBoostClassifier,
+            CatBoostRegressor=FakeCatBoostRegressor,
+        ),
+    )
+    monkeypatch.setitem(
+        sys.modules,
+        "shap",
+        SimpleNamespace(
+            Explainer=UnexpectedGenericExplainer,
+            TreeExplainer=FakeTreeExplainer,
+        ),
+    )
+    frame = make_frame()
+
+    result = feature_importance(
+        FakeCatBoostClassifier(),
+        frame,
+        target="target",
+        feature_columns=["signal", "noise"],
+        method="shap",
+        include_plots=False,
+        log_shap_explainer=False,
+    )
+
+    assert result.metrics == {
+        "importance/shap/signal": 1.0,
+        "importance/shap/noise": 1.0,
+    }
+
+
 def test_shap_importance_preserves_multistep_pipeline_prediction_path(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
