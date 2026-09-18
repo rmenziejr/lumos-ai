@@ -456,9 +456,9 @@ Computes current-window model performance. When a scored train frame is provided
 - `include_train_plots` records whether train plots were requested. Train metrics are available when `train` is provided; report HTML remains holdout-focused in this version.
 - Plot selections that do not apply to the resolved task raise `LumosValidationError` instead of being silently ignored.
 - When multiclass array scores omit `score_labels`, labels are inferred by sorting observed target/prediction labels and warning metadata is recorded.
-- Binary scored classification reports can render confusion matrix, ROC, precision-recall, lift, observed event rate with cumulative capture, threshold performance, and decision curve analysis.
+- Binary scored classification reports can render confusion matrix, ROC, precision-recall, lift, observed event rate with cumulative capture, threshold performance, decision curve analysis, and an operational threshold table.
 - `capture` sorts observations by predicted probability into score deciles. Bars show observed event rate by decile and the cumulative line shows the share of all positive events captured through each decile.
-- `threshold_performance` plots precision, recall/sensitivity, specificity, and F1 across probability thresholds.
+- `threshold_performance` plots precision, recall/sensitivity, specificity, and F1 across probability thresholds.\n- `operational_table` reports cutoff score, flag rate, cumulative capture rate, and population event rate at approximately 10% operating increments.
 - `decision_curve` plots model net benefit against Treat All and Treat None strategies across probability thresholds. It is binary-only and uses `positive_label` as the event of interest.
 - Regression reports can render predicted-vs-actual, residuals-vs-prediction, residual distribution, and a residual Q-Q plot.
 - Returns namespaced metrics under `performance/...`.
