@@ -131,6 +131,152 @@ def objective_with_folds(trial):
 
 `profile="metrics_only"` defaults to scalar metrics only: no plots, no lift metrics, and no per-result JSON artifact. `mlflow_step=fold_index` keeps metric names stable while MLflow records the fold on the metric history. Explicit options still override the profile—for example, pass `plots=[...]`, `include_lift=True`, or `log_dict=True` when a particular fold needs richer diagnostics. Create nested fold runs only when separate child runs or fold-specific artifacts are intentionally required. Final training should use the standard profile so the selected model retains the richer diagnostic report.
 
+## Record Training and Validation Loss by Iteration
+
+Lumos reports evaluate predictions after fitting; enabling Lumos MLflow logging
+does not instrument `model.fit()`. Keep training-curve logging in the training
+pipeline and use the same active MLflow run for the later Lumos reports.
+
+### CatBoost: Log the Recorded Evaluation History
+
+CatBoost's MLflow flavor supports model logging, but does not provide autologging.
+Use `get_evals_result()` after fitting to send the recorded train and validation
+metrics to MLflow. This works for CPU and GPU training because it does not depend
+on a training callback.
+
+Install the additional training dependency:
+
+```bash
+pip install "lumosai[mlflow]" catboost
+```
+
+This example assumes `train_frame`, `validation_frame`, `feature_columns`, and
+`target` are prepared as in the tuning examples above. Validation is used for
+early stopping; keep the final holdout separate.
+
+```python
+import mlflow
+from catboost import CatBoostClassifier
+
+from lumosai.model import performance_report
+
+EXPERIMENT_NAME = "churn-training"
+# For a remote server, configure MLFLOW_TRACKING_URI and authentication before
+# starting the run. Lumos settings alone do not configure these direct calls.
+mlflow.set_experiment(EXPERIMENT_NAME)
+
+with mlflow.start_run(run_name="catboost-training"):
+    model = CatBoostClassifier(
+        iterations=1000,
+        learning_rate=0.05,
+        loss_function="Logloss",
+        eval_metric="Logloss",
+        metric_period=1,  # Required here: each history entry is one iteration.
+        random_seed=42,
+        verbose=False,
+        allow_writing_files=False,
+    )
+    mlflow.log_params(model.get_params())
+    model.fit(
+        train_frame[feature_columns],
+        train_frame[target],
+        eval_set=(
+            validation_frame[feature_columns],
+            validation_frame[target],
+        ),
+        early_stopping_rounds=50,
+        use_best_model=True,
+    )
+
+    history = model.get_evals_result()
+    for dataset_name, metrics in history.items():
+        split = {"learn": "train", "validation": "val"}.get(
+            dataset_name, dataset_name
+        )
+        for metric_name, values in metrics.items():
+            for iteration, value in enumerate(values):
+                mlflow.log_metric(
+                    f"training/{split}/{metric_name}",
+                    float(value),
+                    step=iteration,
+                )
+
+    mlflow.log_dict(history, "training/evaluation_history.json")
+    mlflow.log_metric("training/tree_count", model.tree_count_)
+    best_iteration = model.get_best_iteration()
+    if best_iteration is not None and best_iteration >= 0:
+        mlflow.log_metric("training/best_iteration", best_iteration)
+
+    validation_scored = score_validation(model, validation_frame, feature_columns)
+    performance_report(
+        validation_scored,
+        target=target,
+        prediction="prediction",
+        prediction_score="prediction_score",
+        score_labels=list(model.classes_),
+        profile="metrics_only",
+        experiment_name=EXPERIMENT_NAME,
+    )
+```
+
+In MLflow, plot `training/train/Logloss` and `training/val/Logloss` against
+**step** to compare the curves. Steps and `best_iteration` are zero-based.
+With early stopping, the history covers the iterations actually evaluated,
+including iterations after the best one; `tree_count_` can be smaller because
+`use_best_model=True` retains the best model.
+
+This uploads the curves **after fit returns**, not live during training. A failed
+or interrupted fit will not reach this logging block. `metric_period=1` keeps the
+step mapping exact, at the cost of computing metrics every iteration. Do not
+enumerate a history collected with a larger metric period as though each entry
+were a consecutive training iteration. Only metrics CatBoost actually computes
+appear in the history; for example, training AUC is skipped by default.
+
+For a fitted sklearn pipeline, read history from the final CatBoost estimator
+(for example, `pipeline.named_steps["model"].get_evals_result()`). When fitting,
+the validation data passed to CatBoost must receive the same fitted preprocessing
+as the training data; simply forwarding a raw `model__eval_set` through a
+standard pipeline does not transform it automatically.
+
+For Optuna, put the fitting and history logging block inside the trial's active
+nested run. For cross-validation, give each fold its own nested run, or include
+the fold in the metric name, such as `training/fold_0/val/Logloss`. Do not log
+multiple fold curves under the same key and iteration in one run.
+`performance_report(mlflow_step=fold_index)` records fold-level evaluation,
+not per-iteration training loss.
+
+### XGBoost and LightGBM: Enable Framework Autologging
+
+For supported framework versions, enable the specific integration **before**
+fitting and pass validation data to the framework's training API:
+
+```python
+# Choose the integration matching your estimator:
+import mlflow.xgboost
+mlflow.xgboost.autolog(log_models=False)
+
+# Or, for LightGBM instead:
+# import mlflow.lightgbm
+# mlflow.lightgbm.autolog(log_models=False)
+
+with mlflow.start_run(run_name="boosting-training"):
+    model.fit(X_train, y_train, eval_set=[(X_train, y_train), (X_valid, y_valid)])
+    # Call Lumos reports here with experiment_name=EXPERIMENT_NAME.
+```
+
+Configure the framework's evaluation metric explicitly and inspect the
+framework-generated metric keys in MLflow. The precise fit arguments, early
+stopping options, and compatibility constraints depend on the framework version.
+`log_models=False` leaves model serialization to the existing final-model step.
+Generic sklearn autologging is not a guarantee of per-iteration loss curves for
+every sklearn-compatible estimator. The RandomForest examples above do not have
+a boosting-style train/validation loss history.
+
+References:
+[CatBoost evaluation history](https://catboost.ai/docs/en/concepts/python-reference_catboostclassifier_get_evals_result),
+[MLflow CatBoost flavor](https://mlflow.org/docs/latest/api_reference/_modules/mlflow/catboost.html),
+[MLflow framework autologging](https://mlflow.org/docs/latest/ml/tracking/autolog/).
+
 ## Final Training Report
 
 After selecting parameters, fit the final model and run the standard training bundle in one MLflow run. This final run is the durable record for the selected model.
