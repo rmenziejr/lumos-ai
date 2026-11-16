@@ -66,6 +66,32 @@ def _is_catboost_model(model: Any) -> bool:
     return isinstance(model, (CatBoostClassifier, CatBoostRegressor))
 
 
+def _resolve_catboost_pipeline_inputs(
+    model: Pipeline,
+    features: Any,
+) -> tuple[Any, Any, list[str]]:
+    catboost_model = model.steps[-1][1]
+    transformer = model[:-1]
+    transformed_features = transformer.transform(features)
+    get_feature_names_out = getattr(transformer, "get_feature_names_out", None)
+    if callable(get_feature_names_out):
+        try:
+            feature_names = get_feature_names_out(input_features=list(features.columns))
+        except TypeError:
+            feature_names = get_feature_names_out()
+    elif hasattr(transformed_features, "columns"):
+        feature_names = transformed_features.columns
+    else:
+        msg = "CatBoost pipeline preprocessing must provide get_feature_names_out"
+        raise LumosValidationError(msg)
+
+    if len(feature_names) != transformed_features.shape[1]:
+        msg = "CatBoost pipeline feature names do not match transformed features"
+        raise LumosValidationError(msg)
+
+    return catboost_model, transformed_features, [str(name) for name in feature_names]
+
+
 def _shap_feature_importance(
     model: Any,
     frame_used: Any,
@@ -73,7 +99,20 @@ def _shap_feature_importance(
 ) -> tuple[list[dict[str, Any]], Any]:
     shap = _require_shap()
     features = frame_used[feature_columns]
-    shap_model = _resolve_shap_model(model)
+    shap_features = features
+    shap_feature_names = feature_columns
+    is_catboost_pipeline = (
+        isinstance(model, Pipeline)
+        and len(model.steps) > 1
+        and _is_catboost_model(model.steps[-1][1])
+    )
+    if is_catboost_pipeline:
+        shap_model, shap_features, shap_feature_names = _resolve_catboost_pipeline_inputs(
+            model, features
+        )
+    else:
+        shap_model = _resolve_shap_model(model)
+
     if _is_catboost_model(shap_model):
         explainer = shap.TreeExplainer(
             shap_model,
@@ -81,9 +120,9 @@ def _shap_feature_importance(
         )
     else:
         explainer = shap.Explainer(shap_model, features)
-    values = explainer(features)
+    values = explainer(shap_features)
     raw_values = np.asarray(values.values)
-    feature_count = len(feature_columns)
+    feature_count = len(shap_feature_names)
 
     if raw_values.ndim < 2:
         msg = "SHAP values must include a feature dimension"
@@ -105,7 +144,7 @@ def _shap_feature_importance(
             "importance_mean": float(mean),
             "importance_std": 0.0,
         }
-        for feature, mean in zip(feature_columns, mean_values, strict=True)
+        for feature, mean in zip(shap_feature_names, mean_values, strict=True)
     ]
     rows.sort(key=lambda row: float(row["importance_mean"]), reverse=True)
     return rows, explainer

@@ -10,7 +10,7 @@ import pandas as pd
 import pytest
 from sklearn.ensemble import RandomForestClassifier
 from sklearn.pipeline import Pipeline
-from sklearn.preprocessing import StandardScaler
+from sklearn.preprocessing import PolynomialFeatures, StandardScaler
 
 from lumosai.exceptions import LumosOptionalDependencyError, LumosValidationError
 from lumosai.model.importance import feature_importance
@@ -213,6 +213,130 @@ def test_shap_importance_uses_tree_path_dependent_explainer_for_catboost(
         "importance/shap/signal": 1.0,
         "importance/shap/noise": 1.0,
     }
+
+
+def test_shap_importance_uses_tree_explainer_for_catboost_pipeline(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    class FakeCatBoostClassifier:
+        pass
+
+    class FakeCatBoostRegressor:
+        pass
+
+    class FakeTreeExplainer:
+        def __init__(self, model, *, feature_perturbation):
+            assert isinstance(model, FakeCatBoostClassifier)
+            assert feature_perturbation == "tree_path_dependent"
+
+        def __call__(self, features):
+            assert features.shape[1] == 5
+            return SimpleNamespace(values=np.ones((len(features), features.shape[1])))
+
+    class UnexpectedGenericExplainer:
+        def __init__(self, model, features):
+            pytest.fail("CatBoost pipelines must not use a background-data SHAP explainer")
+
+    monkeypatch.setitem(
+        sys.modules,
+        "catboost",
+        SimpleNamespace(
+            CatBoostClassifier=FakeCatBoostClassifier,
+            CatBoostRegressor=FakeCatBoostRegressor,
+        ),
+    )
+    monkeypatch.setitem(
+        sys.modules,
+        "shap",
+        SimpleNamespace(
+            Explainer=UnexpectedGenericExplainer,
+            TreeExplainer=FakeTreeExplainer,
+        ),
+    )
+    frame = make_frame()
+    transformer = PolynomialFeatures(include_bias=False).fit(frame[["signal", "noise"]])
+    model = Pipeline(
+        [
+            ("features", transformer),
+            ("classifier", FakeCatBoostClassifier()),
+        ]
+    )
+
+    result = feature_importance(
+        model,
+        frame,
+        target="target",
+        feature_columns=["signal", "noise"],
+        method="shap",
+        include_plots=False,
+        log_shap_explainer=False,
+    )
+
+    assert set(result.metrics) == {
+        "importance/shap/signal",
+        "importance/shap/noise",
+        "importance/shap/signal^2",
+        "importance/shap/signal noise",
+        "importance/shap/noise^2",
+    }
+
+
+def test_shap_importance_preserves_calibrated_pipeline_predictions(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    class FakeCatBoostClassifier:
+        pass
+
+    class FakeCatBoostRegressor:
+        pass
+
+    class FakeCalibratedClassifier:
+        def __init__(self):
+            self.estimator = FakeCatBoostClassifier()
+
+        def predict_proba(self, features):
+            return np.ones((len(features), 2))
+
+    class FakeExplainer:
+        received_model = None
+
+        def __init__(self, model, features):
+            type(self).received_model = model
+            assert list(features.columns) == ["signal", "noise"]
+
+        def __call__(self, features):
+            return SimpleNamespace(values=np.ones((len(features), features.shape[1])))
+
+    monkeypatch.setitem(
+        sys.modules,
+        "catboost",
+        SimpleNamespace(
+            CatBoostClassifier=FakeCatBoostClassifier,
+            CatBoostRegressor=FakeCatBoostRegressor,
+        ),
+    )
+    monkeypatch.setitem(sys.modules, "shap", SimpleNamespace(Explainer=FakeExplainer))
+    frame = make_frame()
+    model = Pipeline(
+        [
+            ("scale", StandardScaler()),
+            ("calibrate", FakeCalibratedClassifier()),
+        ]
+    )
+
+    feature_importance(
+        model,
+        frame,
+        target="target",
+        feature_columns=["signal", "noise"],
+        method="shap",
+        include_plots=False,
+        log_shap_explainer=False,
+    )
+
+    received_model = FakeExplainer.received_model
+    assert getattr(received_model, "__self__", None) is model
+    assert getattr(received_model, "__name__", None) == "predict_proba"
 
 
 def test_shap_importance_preserves_multistep_pipeline_prediction_path(
